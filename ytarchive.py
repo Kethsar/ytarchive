@@ -670,6 +670,8 @@ def main():
 			wait = WAIT
 		elif o in ("-n", "--no-wait"):
 			wait = NO_WAIT
+		elif o in ("-t", "--thumbnail"):
+			thumbnail = True
 		elif o in ("-c", "--cookies"):
 			cfile = a
 		elif o in ("-o", "--output"):
