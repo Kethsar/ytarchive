@@ -45,6 +45,29 @@ WAIT_ASK = 0
 WAIT = 1
 NO_WAIT = 2
 
+class FormatInfo:
+	finfo = {
+		"id": "",
+		"title": "",
+		"channel_id": "",
+		"channel": "",
+		"upload_date": ""
+	}
+
+	def get_info(self):
+		return self.finfo
+
+	def set_info(self, player_response):
+		pmfr = player_response["microformat"]["playerMicroformatRenderer"]
+		vid_details = player_response["videoDetails"]
+
+		self.finfo["id"] = vid_details["videoId"]
+		self.finfo["title"] = vid_details["title"]
+		self.finfo["channel_id"] = vid_details["channelId"]
+		self.finfo["channel"] = vid_details["author"]
+		self.finfo["upload_date"] = pmfr["uploadDate"].replace("-", "")
+
+
 # Remove any illegal filename chars
 # Not robust, but the combination of video title and id should prevent other illegal combinations
 def sterilize_filename(fname):
@@ -284,7 +307,7 @@ def get_playable_player_response(info):
 
 	return {"player_response": player_response, "selected_qualities": selected_qualities}
 
-# Get necessary video info such as video/audio URLs and the video title
+# Get necessary video info such as video/audio URLs
 # Stores them in info
 def get_video_info(info):
 	info["lock"].acquire()
@@ -303,7 +326,7 @@ def get_video_info(info):
 	live_details = player_response["microformat"]["playerMicroformatRenderer"]["liveBroadcastDetails"]
 	is_live = live_details["isLiveNow"]
 
-	if not is_live and not "in_progress" in info:
+	if not is_live and not info["in_progress"]:
 		# Likely the livestream ended already.
 		# Check if it ended in the last minute.
 		# If not the stream is likely going to stay public.
@@ -400,12 +423,10 @@ def get_video_info(info):
 				if aonly:
 					break
 
-	# in_progress means we're just here to refresh the urls
-	# likely because the livestream or download is longer than 6 hours
-	if "in_progress" not in info:
-		info["title"] = video_details["title"]
+	if not info["in_progress"]:
+		info["format_info"].set_info(player_response)
+		info["in_progress"] = True
 
-	info["in_progress"] = True
 	info["lock"].release()
 	return True
 
@@ -550,20 +571,30 @@ def print_help():
 
 	print("Options:")
 	print("\t-h, --help")
-	print("\t\tShow this help message\n")
+	print("\t\tShow this help message.")
 	print("\t-w, --wait")
 	print("\t\tWait for a livestream if it's a future scheduled stream.")
 	print("\t\tIf this option is not used when a scheduled stream is provided,")
-	print("\t\tyou will be asked if you want to wait or not.\n")
+	print("\t\tyou will be asked if you want to wait or not.")
+	print()
 	print("\t-n, --no-wait")
-	print("\t\tDo not wait for a livestream if it's a future scheduled stream.\n")
+	print("\t\tDo not wait for a livestream if it's a future scheduled stream.")
+	print()
 	print("\t-c, --cookies COOKIES_FILE")
 	print("\t\tGive a cookies.txt file that has your youtube cookies. Allows")
 	print("\t\tthe script to access members-only content if you are a member")
-	print("\t\tfor the given stream's user. Must be netscape cookie format.\n")
+	print("\t\tfor the given stream's user. Must be netscape cookie format.")
+	print()
 	print("\t-r, --retry-stream SECONDS")
 	print("\t\tIf waiting for a scheduled livestream, re-check if the stream is")
-	print("\t\tup every SECONDS instead of waiting for the initial scheduled time.\n")
+	print("\t\tup every SECONDS instead of waiting for the initial scheduled time.")
+	print()
+	print("\t-o, --output FILENAME_FORMAT")
+	print("\t\tSet the output file name EXCLUDING THE EXTENSION. Can include")
+	print("\t\tformatting similar to youtube-dl, albeit much more limited.")
+	print("\t\tSee FORMAT OPTIONS below for a list of available format keys.")
+	print("\t\tDefault is '%(title)s-%(id)s'")
+	print()
 	print("Examples:")
 	print("\t{0} -w https://www.youtube.com/watch?v=CnWDmKx9cQQ 1080p60/best".format(fname))
 	print("\t{0} https://www.youtube.com/watch?v=ZK1GXnz-1Lw best".format(fname))
@@ -571,13 +602,26 @@ def print_help():
 	print("\t{0} --wait -r 30 https://www.youtube.com/channel/UCZlDXzGoo7d44bwdNObFacg/live best".format(fname))
 	print("\t{0} -c cookies-youtube-com.txt https://www.youtube.com/watch?v=_touw1GND-M best".format(fname))
 	print("\t{0} --no-wait https://www.youtube.com/channel/UCvaTdHTWBGv3MKj3KVqJVCw/live best".format(fname))
+	print("\t{0} -o '%(upload_date)s_%(title)s_[%(channel)s]' https://www.youtube.com/watch?v=HxV9UAMN12o best".format(fname))
+	print()
+	print()
+	print("FORMAT OPTIONS")
+	print("\tFormat keys provided are made to be the same as they would be for")
+	print("\tyoutube-dl. See https://github.com/ytdl-org/youtube-dl#output-template")
+	print()
+	print("\tid (string): Video identifier")
+	print("\ttitle (string): Video title")
+	print("\tchannel_id (string): Id of the channel")
+	print("\tchannel (string): Fulle name of the channel the livestream is on")
+	print("\tupload_date (string): Technically stream date (YYYYMMDD)")
 
 def main():
 	# Python may have the GIL but it's better to be safe
 	# RLock so we can lock multiple times in the same thread without deadlocking
 	info = {
 		"lock":  threading.RLock(),
-		"stopping": False
+		"stopping": False,
+		"format_info": FormatInfo()
 	}
 	url = ""
 	vid = ""
@@ -587,9 +631,10 @@ def main():
 	wait = WAIT_ASK
 	cfile = ""
 	retry_secs = 0
+	fname_format = "%(title)s-%(id)s"
 
 	try:
-		opts, args = getopt.getopt(sys.argv[1:], "hwnc:r:", ["help", "wait", "no-wait", "cookies=", "retry-stream="])
+		opts, args = getopt.getopt(sys.argv[1:], "hwnc:r:o:", ["help", "wait", "no-wait", "cookies=", "retry-stream=", "output="])
 	except getopt.GetoptError as err:
 		print("{0}\n".format(err))
 		print_help()
@@ -605,6 +650,8 @@ def main():
 			wait = NO_WAIT
 		elif o in ("-c", "--cookies"):
 			cfile = a
+		elif o in ("-o", "--output"):
+			fname_format = a
 		elif o in ("-r", "--retry-stream"):
 			try:
 				retry_secs = abs(int(a)) # Just abs it, don't bother dealing with negatives
@@ -627,6 +674,16 @@ def main():
 		print("Could not find video ID")
 		sys.exit(1)
 
+	# Test filename format to make sure a valid one was given
+	try:
+		fname_format % info["format_info"].get_info()
+	except KeyError as err:
+		print("Unknown output format key: {0}".format(err))
+		sys.exit(1)
+	except Exception as err:
+		print("Output format test failed: {0}".format(err))
+		sys.exit(1)
+
 	# Cookie handling for members-only streams
 	if cfile:
 		cjar = http.cookiejar.MozillaCookieJar(cfile)
@@ -646,6 +703,7 @@ def main():
 	info["selected_quality"] = quality
 	info["wait"] = wait
 	info["retry_secs"] = retry_secs
+	info["in_progress"] = False
 
 	if not get_video_info(info):
 		sys.exit(1)
@@ -666,8 +724,7 @@ def main():
 		print("Failed to create video dir: {0}".format(err))
 		sys.exit(1)
 
-	title = info["title"]
-	fname = "{0}-{1}".format(title, vid)
+	fname = fname_format % info["format_info"].get_info()
 	fname = sterilize_filename(fname)
 	afile = os.path.join(os.path.curdir, DTYPE_AUDIO, "{0}.ts".format(fname))
 	vfile = os.path.join(os.path.curdir, DTYPE_VIDEO, "{0}.ts".format(fname))
