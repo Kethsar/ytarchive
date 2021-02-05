@@ -164,6 +164,16 @@ def ask_wait_for_stream(url):
 	cont = input("Wait for the livestream and record it? [y/N]: ")
 	return cont.lower() == "y"
 
+def get_logged_in(player_response):
+	serv_track_params = player_response["responseContext"]["serviceTrackingParams"]
+
+	for stp in serv_track_params:
+		params = stp["params"]
+
+		for p in params:
+			if p["key"] == "logged_in":
+				return p["value"]
+
 # Keep retrieving the player response object until the playability status is OK
 def get_playable_player_response(info):
 	first_wait = True
@@ -200,7 +210,7 @@ def get_playable_player_response(info):
 		elif playability_status == PLAYABLE_UNPLAYABLE:
 			print("Playability status: Unplayable. Reason: {0}".format(playability["reason"]))
 			# Actually look for the logged_in key later. For now, hardcoding
-			print("Logged in status: {0}".format(player_response["responseContext"]["serviceTrackingParams"][0]["params"][1]["value"]))
+			print("Logged in status: {0}".format(get_logged_in(player_response)))
 			print("If this is a members only stream, you provided a cookies.txt file, and the above 'logged in' status is not '1', please try updating your cookies file.")
 			return None
 		elif playability_status == PLAYABLE_OFFLINE:
