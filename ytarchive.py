@@ -45,6 +45,8 @@ WAIT_ASK = 0
 WAIT = 1
 NO_WAIT = 2
 
+# Simple class to more easily keep track of what fields are available for
+# file name formatting
 class FormatInfo:
 	finfo = {
 		"id": "",
@@ -103,6 +105,7 @@ def execute(args):
 
 	return retcode
 
+# Download data from the given URL and return it as unicode text
 def download_as_text(url):
 	data = b''
 
@@ -138,10 +141,10 @@ def get_player_response(vid):
 	player_response = json.loads(parsedinfo['player_response'][0])
 	return player_response
 
+# Make a comma-separated list of available formats
 def make_quality_list(formats):
 	qualities = ""
 	quarity = ""
-	selected_qualities = []
 
 	for f in formats:
 		qualities += f + ", "
@@ -149,6 +152,7 @@ def make_quality_list(formats):
 	qualities += "best"
 	return qualities
 
+# Parse the user-given list of qualities they are willing to accept for download
 def parse_quality_list(formats, quality):
 	selected_qualities = []
 	quality = quality.lower().strip()
@@ -198,6 +202,8 @@ def ask_wait_for_stream(url):
 	cont = input("Wait for the livestream and record it? [y/N]: ")
 	return cont.lower() == "y"
 
+# Find the logged_in value from the given player_response object
+# Useful for checking if a cookies file is working properly
 def get_logged_in(player_response):
 	serv_track_params = player_response["responseContext"]["serviceTrackingParams"]
 
@@ -241,12 +247,14 @@ def get_playable_player_response(info):
 		if playability_status == PLAYABLE_ERROR:
 			print("Playability status: ERROR. Reason: {0}".format(playability["reason"]))
 			return None
+
 		elif playability_status == PLAYABLE_UNPLAYABLE:
-			print("Playability status: Unplayable. Reason: {0}".format(playability["reason"]))
-			# Actually look for the logged_in key later. For now, hardcoding
+			print("Playability status: Unplayable.")
+			print("Reason: {0}".format(playability["reason"]))
 			print("Logged in status: {0}".format(get_logged_in(player_response)))
 			print("If this is a members only stream, you provided a cookies.txt file, and the above 'logged in' status is not '1', please try updating your cookies file.")
 			return None
+
 		elif playability_status == PLAYABLE_OFFLINE:
 			if info["wait"] == NO_WAIT:
 				print("Stream appears to be a future scheduled stream, and you opted not to wait.")
@@ -361,14 +369,14 @@ def get_video_info(info):
 	
 	formats = player_response["streamingData"]["adaptiveFormats"]
 
-	if "quality" not in info:
+	if info["quality"] < 0:
 		qualities = ["audio_only"]
 		itags = list(VIDEO_LABEL_ITAGS.keys())
 		found = False
 
+		# Generate a list of available qualities, sorted in order from best to worst
 		for fmt in formats:
 			if fmt["mimeType"].startswith("video/mp4"):
-				# Insert in quality order
 				qlabel = fmt["qualityLabel"].lower()
 				priority = itags.index(qlabel)
 				idx = 0
@@ -388,6 +396,9 @@ def get_video_info(info):
 
 			for q in selected_qualities:
 				q = q.strip()
+
+				# Find the best quality of those availble.
+				# This is why we sorted the list as we made it.
 				if q == "best":
 					itags = list(VIDEO_LABEL_ITAGS.keys())
 					best = 0
@@ -405,7 +416,7 @@ def get_video_info(info):
 					q = itags[best]
 
 				video_itag = VIDEO_LABEL_ITAGS[q]
-				aonly = q == "audio_only"
+				aonly = video_itag == VIDEO_LABEL_ITAGS["audio_only"]
 
 				if aonly:
 					info["quality"] = video_itag
@@ -423,6 +434,14 @@ def get_video_info(info):
 
 				if found:
 					break
+		
+		# None of the qualities the user gave were available
+		# Should only be possible if they chose to wait for a stream
+		# and chose only qualities that the streamer ended up not using
+		# i.e. 1080p60/720p60 when the stream is only available in 30 FPS
+		print("\nThe qualities you selected ended up unavailble for this stream")
+		print("You will now have the option to select from the available qualities")
+		selected_qualities.clear()
 	else:
 		aonly = info["quality"] == VIDEO_LABEL_ITAGS["audio_only"]
 
@@ -435,6 +454,7 @@ def get_video_info(info):
 				if aonly:
 					break
 
+	# Grab some extra info on the first run through this function
 	if not info["in_progress"]:
 		info["format_info"].set_info(player_response)
 		info["thumbnail"] = pmfr["thumbnail"]["thumbnails"][0]["url"]
@@ -446,12 +466,13 @@ def get_video_info(info):
 # Download the given data_type stream to dfile
 # Sends progress info through progress_queue
 def download_stream(data_type, dfile, progress_queue, info):
-	live = True
+	downloading = True
 	frag = 0
 	url = info[data_type]
 	f = open(dfile, "ab")
 
-	while live:
+	while downloading:
+		# Check if the user decided to cancel this download, and exit gracefully
 		info["lock"].acquire()
 		if info["stopping"]:
 			info["lock"].release()
@@ -517,13 +538,14 @@ def download_stream(data_type, dfile, progress_queue, info):
 				time.sleep(2)
 
 			if tries >= 10 or empty_cnt >= 20:
-				live = False
+				downloading = False
 
 		frag += 1
 
 	if not f.closed:
 		f.close()
 
+# Find the video ID from the given URL
 def get_video_id(url):
 	parsedurl = urllib.parse.urlparse(url)
 	nl = parsedurl.netloc.lower()
@@ -542,6 +564,8 @@ def get_video_id(url):
 
 			vid = parsed_query['v'][0]
 
+		# Attempt to find the actual video ID of the current or closest scheduled
+		# livestream for a channel
 		elif lpath.startswith("/channel") and lpath.endswith("live"):
 			# This is fucking awful but it works
 			html = download_as_text(url)
@@ -563,6 +587,7 @@ def get_video_id(url):
 
 	return vid
 
+# Attempt to delete the given file
 def try_delete(fname):
 	try:
 		if os.path.exists(fname):
@@ -642,7 +667,8 @@ def main():
 		"stopping": False,
 		"format_info": FormatInfo(),
 		"in_progress": False,
-		"thumbnail": ""
+		"thumbnail": "",
+		"quality": -1
 	}
 	url = ""
 	vid = ""
@@ -748,6 +774,7 @@ def main():
 		print("Failed to create video dir: {0}".format(err))
 		sys.exit(1)
 
+	# Setup file name and directories
 	full_fpath = fname_format % info["format_info"].get_info()
 	fdir = os.path.dirname(full_fpath)
 	fname = os.path.basename(full_fpath)
@@ -764,6 +791,7 @@ def main():
 		DTYPE_VIDEO: 0
 	}
 
+	# Grab the thumbnail for the livestream for embedding later
 	if thumbnail and info["thumbnail"]:
 		thumbnail = download_thumbnail(info["thumbnail"], thmbnl_file)
 
@@ -803,6 +831,7 @@ def main():
 		except queue.Empty:
 			pass
 		except KeyboardInterrupt:
+			# Attempt to shutdown gracefully by stopping the download threads
 			info["lock"].acquire()
 			info["stopping"] = True
 			info["lock"].release()
@@ -835,6 +864,7 @@ def main():
 	retcode = 0
 	mfile = ""
 
+	# Output format included a directory structure. Create it if it doesn't exist
 	if fdir:
 		try:
 			os.makedirs(fdir, exist_ok=True)
@@ -868,6 +898,10 @@ def main():
 		print("Muxing files")
 		mfile = os.path.join(fdir, "{0}.mp4".format(fname))
 
+		# The seemingly pointless -map args are required for adding the 
+		# thumbnail, at least for video. For audio only, it seemed to work
+		# without but I kept it up there as well
+		# Also this is only doable because we know the livestream is MP4
 		if thumbnail:
 			retcode = execute(["ffmpeg",
 				"-hide_banner",
