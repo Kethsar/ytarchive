@@ -1,0 +1,755 @@
+#!/bin/env python
+import urllib.parse
+import urllib.request
+import urllib.error
+import http.client
+import http.cookiejar
+import json
+import sys
+import time
+import calendar
+import threading
+import os
+import queue
+import shutil
+import subprocess
+import getopt
+
+# Constants
+INFO_URL = "https://www.youtube.com/get_video_info?video_id={0}"
+HTML_VIDEO_LINK_TAG = '<link rel="canonical" href="https://www.youtube.com/watch?v='
+PLAYABLE_OK = "OK"
+PLAYABLE_OFFLINE = "LIVE_STREAM_OFFLINE"
+PLAYABLE_UNPLAYABLE = "UNPLAYABLE"
+PLAYABLE_ERROR = "ERROR"
+BAD_CHARS = '<>:"/\\|?*'
+DTYPE_AUDIO = "audio"
+DTYPE_VIDEO = "video"
+
+# https://gist.github.com/AgentOak/34d47c65b1d28829bb17c24c04a0096f
+AUDIO_ITAG = 140
+VIDEO_LABEL_ITAGS = {
+	'audio_only': 0, 
+	'144p': 160,
+	'240p': 133,
+	'360p': 134,
+	'480p': 135,
+	'720p': 136,
+	'720p60': 298,
+	'1080p': 137,
+	'1080p60': 299,
+}
+DEFAULT_VIDEO_QUALITY = "best"
+RECHECK_TIME = 15
+WAIT_ASK = 0
+WAIT = 1
+NO_WAIT = 2
+
+# Remove any illegal filename chars
+# Not robust, but the combination of video title and id should prevent other illegal combinations
+def sterilize_filename(fname):
+	for c in BAD_CHARS:
+		fname = fname.replace(c, "_")
+
+	return fname
+
+# Pretty formatting of byte count
+def format_size(bsize):
+	postfixes = ["bytes", "KiB", "MiB", "GiB"] # don't even bother with terabytes
+	i = 0
+	while bsize > 1024:
+		bsize = bsize/1024
+		i += 1
+	
+	return "{0:.2f}{1}".format(bsize, postfixes[i])
+
+# Execute an external process using the given args
+# Returns the process return code, or -1 on unknown error
+def execute(args):
+	retcode = 0
+	print("Executing command: {0}".format(" ".join(args)))
+
+	try:
+		if sys.version_info.major == 3 and sys.version_info.minor >= 5:
+			retcode = subprocess.run(args).returncode
+		else:
+			retcode = subprocess.call(args)
+	except Exception as err:
+		print(err)
+		retcode = -1
+
+	return retcode
+
+def download_as_text(url):
+	data = b''
+
+	try:
+		with urllib.request.urlopen(url, timeout=5) as resp:
+			data = resp.read()
+	except Exception as err:
+		print("Failed to retrieve data from {0}: {1}".format(url, err))
+		return None
+	
+	return data.decode("utf-8")
+
+# Get the base player response object for the given video id
+def get_player_response(vid):
+	vinfo = download_as_text(INFO_URL.format(vid))
+
+	if len(vinfo) == 0:
+		print("No video information found, somehow")
+		return None
+
+	parsedinfo = urllib.parse.parse_qs(vinfo)
+	player_response = json.loads(parsedinfo['player_response'][0])
+	return player_response
+
+def make_quality_list(formats):
+	qualities = ""
+	quarity = ""
+	selected_qualities = []
+
+	for f in formats:
+		qualities += f + ", "
+
+	qualities += "best"
+	return qualities
+
+def parse_quality_list(formats, quality):
+	selected_qualities = []
+	quality = quality.lower().strip()
+	if "best" not in formats:
+		formats.append("best")
+
+	selected_quarities = quality.split('/')
+	for q in selected_quarities:
+		if q.strip() in formats:
+			selected_qualities.append(q)
+		
+	if len(selected_qualities) < 1:
+		print("No valid qualities selected")
+
+	return selected_qualities
+
+# Prompt the user to select a video quality
+def get_quality_from_user(formats, waiting=False):
+	if waiting:
+		print("Since you are going to wait for the stream, you must pre-emptively select a video quality.")
+		print("There is no way to know which qualities will be available before the stream starts, so a list of all possible stream qualities will be presented.")
+		print("You can use youtube-dl style selection (slash-delimited first to last preference). Default is 'best'\n")
+	
+	quarity = ""
+	selected_qualities = []
+	qualities = make_quality_list(formats)
+	print("Available video qualities: {0}".format(qualities))
+
+	while len(selected_qualities) < 1:
+		quarity = input("Enter desired video quality: ")
+		quarity = quarity.lower().strip()
+		if quarity == "":
+			quarity = DEFAULT_VIDEO_QUALITY
+
+		selected_qualities = parse_quality_list(formats, quarity)
+
+	return selected_qualities
+
+# Ask if the user wants to wait for a scheduled stream to start and then record it
+def ask_wait_for_stream(url):
+	print("{0} is probably a future scheduled livestream.".format(url))
+	print("I would highly recommend using streamlink with the --retry-streams argument.")
+	print("Example: streamlink --retry-streams=15 -o 'title.mp4' '{0}' best".format(url))
+	print()
+	print("I can do this instead of you don't have streamlink.")
+
+	cont = input("Wait for the livestream and record it? [y/N]: ")
+	return cont.lower() == "y"
+
+# Keep retrieving the player response object until the playability status is OK
+def get_playable_player_response(info):
+	first_wait = True
+	retry = True
+	player_response = {}
+	secs_late = 0
+	selected_qualities = []
+	vid = info["vid"]
+	url = info["url"]
+
+	while retry:
+		player_response = get_player_response(vid)
+		if not player_response:
+			return None
+
+
+		if not 'videoDetails' in player_response:
+			print("Video Details not found, video is likely private or does not exist.")
+			return None
+
+		if not player_response['videoDetails']['isLiveContent']:
+			print("{0} is not a livestream. It would be better to use youtube-dl to download it.".format(url))
+			return None
+
+		playability = player_response['playabilityStatus']
+		playability_status = playability['status']
+
+		if info["selected_quality"]:
+			selected_qualities = parse_quality_list(list(VIDEO_LABEL_ITAGS.keys()), info["selected_quality"])
+
+		if playability_status == PLAYABLE_ERROR:
+			print("Playability status: ERROR. Reason: {0}".format(playability["reason"]))
+			return None
+		elif playability_status == PLAYABLE_UNPLAYABLE:
+			print("Playability status: Unplayable. Reason: {0}".format(playability["reason"]))
+			# Actually look for the logged_in key later. For now, hardcoding
+			print("Logged in status: {0}".format(player_response["responseContext"]["serviceTrackingParams"][0]["params"][1]["value"]))
+			print("If this is a members only stream, you provided a cookies.txt file, and the above 'logged in' status is not '1', please try updating your cookies file.")
+			return None
+		elif playability_status == PLAYABLE_OFFLINE:
+			if info["wait"] == NO_WAIT:
+				print("Stream appears to be a future scheduled stream, and you opted not to wait.")
+				return None
+
+			if first_wait and info["wait"] == WAIT_ASK:
+				if not ask_wait_for_stream(url):
+					return None
+
+			if first_wait:
+				print()
+				if len(selected_qualities) < 1:
+					selected_qualities = get_quality_from_user(list(VIDEO_LABEL_ITAGS.keys()), True)
+
+			if info["retry_secs"] > 0:
+				if first_wait:
+					print("Waiting for stream, retrying every {0} seconds...".format(info["retry_secs"]))
+
+				first_wait = False
+				time.sleep(info["retry_secs"])
+				continue
+
+			# Jesus fuck youtube, embed some more objects why don't you
+			sched_time = int(playability["liveStreamability"]["liveStreamabilityRenderer"]["offlineSlate"]["liveStreamOfflineSlateRenderer"]["scheduledStartTime"])
+			cur_time = int(time.time())
+			slep_time = sched_time - cur_time
+
+			if slep_time > 0:
+				if not first_wait:
+					if secs_late > 0:
+						print()
+					print("Stream rescheduled")
+
+				first_wait = False
+				secs_late = 0
+
+				print("Stream starts in {0} seconds. Waiting for this time to elapse...".format(slep_time))
+
+				# Loop it just in case a rogue sleep interrupt happens
+				while slep_time > 0:
+					# There must be a better way but whatever
+					time.sleep(slep_time)
+					cur_time = int(time.time())
+					slep_time = sched_time - cur_time
+
+				# We've waited until the scheduled time
+				continue
+
+			first_wait = False
+
+			# If we get this far, the stream's scheduled time has passed but it's still not started
+			# Check every 15 seconds
+			if not first_wait:
+				time.sleep(RECHECK_TIME)
+				secs_late += RECHECK_TIME
+				print("\rStream is {0} seconds late...".format(secs_late), end="")
+				continue
+
+		elif playability_status != PLAYABLE_OK:
+			if secs_late > 0:
+				print()
+				
+			print("Unknown playability status: {0}".format(playability_status))
+			return None
+
+		if secs_late > 0:
+			print()
+		retry = False
+
+	return {"player_response": player_response, "selected_qualities": selected_qualities}
+
+# Get necessary video info such as video/audio URLs and the video title
+# Stores them in info
+def get_video_info(info):
+	info["lock"].acquire()
+
+	if info["stopping"]:
+		info["lock"].release()
+		return
+
+	vals = get_playable_player_response(info)
+	if not vals:
+		return False
+
+	player_response = vals["player_response"]
+	selected_qualities = vals["selected_qualities"]
+	video_details = player_response['videoDetails']
+	live_details = player_response["microformat"]["playerMicroformatRenderer"]["liveBroadcastDetails"]
+	is_live = live_details["isLiveNow"]
+
+	if not is_live and not "in_progress" in info:
+		# Likely the livestream ended already.
+		# Check if it ended in the last minute.
+		# If not the stream is likely going to stay public.
+		if "endTimestamp" in live_details:
+			# Only appears if the stream was actually live and ended.
+			# You'd think if we are in this code block it would be there but I don't trust anything
+			end_timestamp = live_details["endTimestamp"]
+
+			#format 2021-01-26T16:47:42+00:00
+			end_time = calendar.timegm(time.strptime(end_timestamp, "%Y-%m-%dT%H:%M:%S%z"))
+			elapsed = time.time() - end_time
+			if elapsed > 60:
+				print("Livestream has been offline for more than a minute.")
+				print("It's likely to be public still, try using youtube-dl")
+				return False
+		else:
+			print("Livestream is offline, should have started, but has no end timestamp.")
+			print("You could try again, or try youtube-dl.")
+			return False
+	
+	formats = player_response["streamingData"]["adaptiveFormats"]
+
+	if "quality" not in info:
+		qualities = ["audio_only"]
+		itags = list(VIDEO_LABEL_ITAGS.keys())
+		found = False
+
+		for fmt in formats:
+			if fmt["mimeType"].startswith("video/mp4"):
+				# Insert in quality order
+				qlabel = fmt["qualityLabel"].lower()
+				priority = itags.index(qlabel)
+				idx = 0
+
+				for q in qualities:
+					p = itags.index(q)
+					if p > priority:
+						break
+					
+					idx += 1
+
+				qualities.insert(idx, qlabel)
+
+		while not found:
+			if len(selected_qualities) == 0:
+				selected_qualities = get_quality_from_user(qualities)
+
+			for q in selected_qualities:
+				q = q.strip()
+				if q == "best":
+					itags = list(VIDEO_LABEL_ITAGS.keys())
+					best = 0
+
+					for fmt in formats:
+						if 'qualityLabel' not in fmt:
+							continue
+
+						qlabel = fmt["qualityLabel"].lower()
+						priority = itags.index(qlabel)
+
+						if priority > best:
+							best = priority
+
+					q = itags[best]
+
+				video_itag = VIDEO_LABEL_ITAGS[q]
+				aonly = q == "audio_only"
+
+				if aonly:
+					info["quality"] = video_itag
+					info[DTYPE_VIDEO] = ""
+					found = True
+
+				for fmt in formats:
+					if not aonly and fmt["itag"] == video_itag:
+						info["quality"] = video_itag
+						info[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
+						found = True
+						print("Selected quality: {0}".format(q))
+					elif fmt["itag"] == AUDIO_ITAG:
+						info[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
+
+				if found:
+					break
+	else:
+		aonly = info["quality"] == VIDEO_LABEL_ITAGS["audio_only"]
+
+		for fmt in formats:
+			if not aonly and fmt["itag"] == info["quality"]:
+				info[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
+			elif fmt["itag"] == AUDIO_ITAG:
+				info[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
+
+				if aonly:
+					break
+
+	# in_progress means we're just here to refresh the urls
+	# likely because the livestream or download is longer than 6 hours
+	if "in_progress" not in info:
+		info["title"] = video_details["title"]
+
+	info["in_progress"] = True
+	info["lock"].release()
+	return True
+
+# Download the given data_type stream to dfile
+# Sends progress info through progress_queue
+def download_stream(data_type, dfile, progress_queue, info):
+	live = True
+	frag = 0
+	url = info[data_type]
+	f = open(dfile, "ab")
+
+	while live:
+		info["lock"].acquire()
+		if info["stopping"]:
+			info["lock"].release()
+			break
+
+		info["lock"].release()
+
+		tries = 0
+		empty_cnt = 0
+		bad_url = False
+
+		while tries < 10 and empty_cnt < 20:
+			buf = b''
+
+			if bad_url:
+				# Check if a new URL is already waiting for us
+				# Else refresh auth by calling get_video_info again
+				info["lock"].acquire()
+				new_url = info[data_type]
+
+				if new_url != url:
+					url = new_url
+				elif get_video_info(info):
+					url = info[data_type]
+
+				info["lock"].release()
+				bad_url = False
+
+			try:
+				with urllib.request.urlopen(url.format(frag), timeout=5) as resp:
+					buf = resp.read()
+
+				if len(buf) == 0:
+					empty_cnt += 1
+
+				b = f.write(buf)
+				progress_queue.put({
+					"data_type": data_type,
+					"bytes": b
+				})
+				break
+			except urllib.error.HTTPError as err:
+				# 403 means our URLs have likely expired
+				# Happens every 21540 seconds, or 359 minutes.
+				if err.code == 403:
+					bad_url = True
+				
+				tries += 1
+				time.sleep(2)
+			except http.client.IncompleteRead:
+				# Seems to happen on the last chunk that has data. Maybe.
+				tries += 1
+				if tries >= 10 and len(buf) > 0:
+					b = f.write(buf)
+					progress_queue.put({
+						"data_type": data_type,
+						"bytes": b
+					})
+				else:
+					time.sleep(2)
+			except Exception as err:
+				tries += 1
+				time.sleep(2)
+
+			if tries >= 10 or empty_cnt >= 20:
+				live = False
+
+		frag += 1
+
+	if not f.closed:
+		f.close()
+
+def get_video_id(url):
+	parsedurl = urllib.parse.urlparse(url)
+	nl = parsedurl.netloc.lower()
+	vid = ""
+
+	if nl == "www.youtube.com" or nl == "youtube.com":
+		lpath = parsedurl.path.lower()
+
+		if lpath.startswith("/watch"):
+			# parsed queries are always in a list
+			parsed_query = urllib.parse.parse_qs(parsedurl.query)
+
+			if not 'v' in parsed_query:
+				print("Youtube URL missing video ID")
+				return vid
+
+			vid = parsed_query['v'][0]
+
+		elif lpath.startswith("/channel") and lpath.endswith("live"):
+			# This is fucking awful but it works
+			html = download_as_text(url)
+			if len(html) == 0:
+				return vid
+
+			startidx = html.find(HTML_VIDEO_LINK_TAG)
+			if startidx < 0:
+				return vid
+			
+			startidx += len(HTML_VIDEO_LINK_TAG)
+			endidx = html.find('"', startidx)
+			vid = html[startidx:endidx]
+	elif nl == "youtu.be":
+		# path includes the leading slash
+		vid = parsedurl.path.strip('/')
+	else:
+		print("{0} is not a known valid youtube URL.".format(url))
+
+	return vid
+
+def try_delete(fname):
+	try:
+		os.remove(fname)
+	except FileNotFoundError:
+		pass
+	except Exception as err:
+		print("Error deleting file: {0}".format(err))
+
+def print_help():
+	fname = os.path.basename(sys.argv[0])
+	print("usage: {0} [OPTIONS] [url] [quality]\n".format(fname))
+	print("\t[url] is a youtube livestream URL. If not provided, you will be")
+	print("\tprompted to enter one.\n")
+	print("\t[quality] is a slash-delimited list of video qualities you want")
+	print("\tto be selected for download, from most to least wanted. If not")
+	print("\tprovided, you will be prompted for one, with a list of available")
+	print("\tqualities to choose from. The following valus are valid:")
+	print("\t{0}\n".format(make_quality_list(VIDEO_LABEL_ITAGS)))
+
+	print("Options:")
+	print("\t-h, --help")
+	print("\t\tShow this help message\n")
+	print("\t-w, --wait")
+	print("\t\tWait for a livestream if it's a future scheduled stream.")
+	print("\t\tIf this option is not used when a scheduled stream is provided,")
+	print("\t\tyou will be asked if you want to wait or not.\n")
+	print("\t-n, --no-wait")
+	print("\t\tDo not wait for a livestream if it's a future scheduled stream.\n")
+	print("\t-c, --cookies COOKIES_FILE")
+	print("\t\tGive a cookies.txt file that has your youtube cookies. Allows")
+	print("\t\tthe script to access members-only content if you are a member")
+	print("\t\tfor the given stream's user. Must be netscape cookie format.\n")
+	print("\t-r, --retry-stream SECONDS")
+	print("\t\tIf waiting for a scheduled livestream, re-check if the stream is")
+	print("\t\tup every SECONDS instead of waiting for the initial scheduled time.\n")
+	print("Examples:")
+	print("\t{0} -w https://www.youtube.com/watch?v=CnWDmKx9cQQ 1080p60/best".format(fname))
+	print("\t{0} https://www.youtube.com/watch?v=ZK1GXnz-1Lw best".format(fname))
+	print("\t{0} -w".format(fname))
+	print("\t{0} --wait -r 30 https://www.youtube.com/channel/UCZlDXzGoo7d44bwdNObFacg/live best".format(fname))
+	print("\t{0} -c cookies-youtube-com.txt https://www.youtube.com/watch?v=_touw1GND-M best".format(fname))
+	print("\t{0} --no-wait https://www.youtube.com/channel/UCvaTdHTWBGv3MKj3KVqJVCw/live best".format(fname))
+
+def main():
+	# Python may have the GIL but it's better to be safe
+	# RLock so we can lock multiple times in the same thread without deadlocking
+	info = {
+		"lock":  threading.RLock(),
+		"stopping": False
+	}
+	url = ""
+	vid = ""
+	quality = ""
+	opts = None
+	args = None
+	wait = WAIT_ASK
+	cfile = ""
+	retry_secs = 0
+
+	try:
+		opts, args = getopt.getopt(sys.argv[1:], "hwnc:r:", ["help", "wait", "no-wait", "cookies=", "retry-stream="])
+	except getopt.GetoptError as err:
+		print("{0}\n".format(err))
+		print_help()
+		sys.exit(1)
+
+	for o, a in opts:
+		if o in ("-h", "--help"):
+			print_help()
+			sys.exit(0)
+		elif o in ("-w", "--wait"):
+			wait = WAIT
+		elif o in ("-n", "--no-wait"):
+			wait = NO_WAIT
+		elif o in ("-c", "--cookies"):
+			cfile = a
+		elif o in ("-r", "--retry-stream"):
+			try:
+				retry_secs = abs(int(a)) # Just abs it, don't bother dealing with negatives
+			except Exception:
+				print("retry-stream must be given a number argument. Given {0}".format(a))
+				sys.exit(1)
+		else:
+			assert False, "Unhandled option"
+
+	if len(args) > 1:
+		url = args[0]
+		quality = args[1]
+	elif len(args) > 0:
+		url = args[0]
+	else:
+		url = input("Enter a youtube video URL: ")
+
+	vid = get_video_id(url)
+	if not vid:
+		print("Could not find video ID")
+		sys.exit(1)
+
+	# Cookie handling for members-only streams
+	if cfile:
+		cjar = http.cookiejar.MozillaCookieJar(cfile)
+		try:
+			cjar.load()
+			print("Loaded cookie file {0}".format(cfile))
+		except Exception as err:
+			print("Failed to load cookies file: {0}".format(err))
+			sys.exit(1)
+		
+		cproc = urllib.request.HTTPCookieProcessor(cjar)
+		opener = urllib.request.build_opener(cproc)
+		urllib.request.install_opener(opener)
+
+	info["vid"] = vid
+	info["url"] = url
+	info["selected_quality"] = quality
+	info["wait"] = wait
+	info["retry_secs"] = retry_secs
+
+	if not get_video_info(info):
+		sys.exit(1)
+
+	try:
+		os.mkdir(DTYPE_AUDIO)
+	except FileExistsError:
+		pass
+	except Exception as err:
+		print("Failed to create audio dir: {0}".format(err))
+		sys.exit(1)
+	
+	try:
+		os.mkdir(DTYPE_VIDEO)
+	except FileExistsError:
+		pass
+	except Exception as err:
+		print("Failed to create video dir: {0}".format(err))
+		sys.exit(1)
+
+	title = info["title"]
+	fname = "{0}-{1}".format(title, vid)
+	fname = sterilize_filename(fname)
+	afile = os.path.join(os.path.curdir, DTYPE_AUDIO, "{0}.ts".format(fname))
+	vfile = os.path.join(os.path.curdir, DTYPE_VIDEO, "{0}.ts".format(fname))
+	progress_queue = queue.Queue()
+	total_bytes = 0
+	threads = []
+	frags = {
+		DTYPE_AUDIO: 0,
+		DTYPE_VIDEO: 0
+	}
+
+	athread = threading.Thread(target=download_stream, args=(DTYPE_AUDIO, afile, progress_queue, info))
+	threads.append(athread)
+	athread.start()
+
+	if info[DTYPE_VIDEO]:
+		vthread = threading.Thread(target=download_stream, args=(DTYPE_VIDEO, vfile, progress_queue, info))
+		threads.append(vthread)
+		vthread.start()
+
+	# Print progress to stdout
+	# Included info is video and audio fragments downloaded, and total data downloaded
+	while True:
+		alive = False
+
+		for t in threads:
+			if t.is_alive():
+				alive = True
+				break
+		
+		if not alive:
+			break
+
+		try:
+			progress = progress_queue.get(timeout=1)
+
+			total_bytes += progress["bytes"]
+			frags[progress["data_type"]] += 1
+
+			print("\rVideo fragments: {0}; Audio fragments: {1}; Total Downloaded: {2}     ".format(frags[DTYPE_VIDEO], frags[DTYPE_AUDIO], format_size(total_bytes)), end="")
+		except queue.Empty:
+			pass
+		except KeyboardInterrupt:
+			info["lock"].acquire()
+			info["stopping"] = True
+			info["lock"].release()
+			print("\nKeyboard Interrupt, stopping download...")
+			for t in threads:
+				t.join()
+			sys.exit(2)
+
+	print()
+	aonly = info["quality"] == VIDEO_LABEL_ITAGS["audio_only"]
+
+	# Attempt to mux the video and audio files using ffmpeg
+	if not aonly and frags[DTYPE_AUDIO] != frags[DTYPE_VIDEO]:
+		print("Mismatched number of video and audio fragments.")
+		print("The files should still be mergable but data might be missing somewhere.")
+
+	ffmpeg = shutil.which("ffmpeg")
+	if not ffmpeg:
+		print("ffmpeg not found. Please install ffmpeg.")
+
+		if aonly:
+			print("To place the audio in its proper container, run the following command:")
+			print("ffmpeg -i {0} -c copy {1}.m4a".format(afile, fname))
+		else:
+			print("To merge the files, run the following command:")
+			print("ffmpeg -i {0} -i {1} -c copy {2}.mp4".format(vfile, afile, fname))
+			
+		sys.exit(0)
+
+	retcode = 0
+	mfile = ""
+
+	if aonly:
+		print("Correcting audio container")
+		mfile = "{0}.m4a".format(fname)
+		retcode = execute(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", afile, "-c", "copy", mfile])
+	else:
+		print("Muxing files")
+		mfile = "{0}.mp4".format(fname)
+		retcode = execute(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", vfile, "-i", afile, "-c", "copy", mfile])
+
+	if retcode != 0:
+		print("execute returned code {0}. Something must have gone wrong with ffmpeg.".format(retcode))
+		sys.exit(retcode)
+
+	try_delete(afile)
+	try_delete(vfile)
+
+	print("Final file: {0}".format(mfile))
+
+if __name__ == "__main__":
+	main()
