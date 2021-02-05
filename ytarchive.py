@@ -61,11 +61,11 @@ class FormatInfo:
 		pmfr = player_response["microformat"]["playerMicroformatRenderer"]
 		vid_details = player_response["videoDetails"]
 
-		self.finfo["id"] = vid_details["videoId"]
-		self.finfo["title"] = vid_details["title"]
-		self.finfo["channel_id"] = vid_details["channelId"]
-		self.finfo["channel"] = vid_details["author"]
-		self.finfo["upload_date"] = pmfr["uploadDate"].replace("-", "")
+		self.finfo["id"] = sterilize_filename(vid_details["videoId"])
+		self.finfo["title"] = sterilize_filename(vid_details["title"])
+		self.finfo["channel_id"] = sterilize_filename(vid_details["channelId"])
+		self.finfo["channel"] = sterilize_filename(vid_details["author"])
+		self.finfo["upload_date"] = sterilize_filename(pmfr["uploadDate"].replace("-", ""))
 
 
 # Remove any illegal filename chars
@@ -597,7 +597,7 @@ def print_help():
 	print("\t-t, --thumbnail")
 	print("\t\tDownload and embed the stream thumbnail in the finished file.")
 	print("\t\tWhether the thumbnail shows properly depends on your file browser.")
-	print("\t\tWindow's seems to work. Nemo on Linux seemingly does not.")
+	print("\t\tWindows' seems to work. Nemo on Linux seemingly does not.")
 	print()
 	print("\t-c, --cookies COOKIES_FILE")
 	print("\t\tGive a cookies.txt file that has your youtube cookies. Allows")
@@ -621,7 +621,7 @@ def print_help():
 	print("\t{0} --wait -r 30 https://www.youtube.com/channel/UCZlDXzGoo7d44bwdNObFacg/live best".format(fname))
 	print("\t{0} -c cookies-youtube-com.txt https://www.youtube.com/watch?v=_touw1GND-M best".format(fname))
 	print("\t{0} --no-wait https://www.youtube.com/channel/UCvaTdHTWBGv3MKj3KVqJVCw/live best".format(fname))
-	print("\t{0} -o '%(upload_date)s_%(title)s_[%(channel)s]' https://www.youtube.com/watch?v=HxV9UAMN12o best".format(fname))
+	print("\t{0} -o '%(channel)s/%(upload_date)s_%(title)s' https://www.youtube.com/watch?v=HxV9UAMN12o best".format(fname))
 	print()
 	print()
 	print("FORMAT OPTIONS")
@@ -748,11 +748,14 @@ def main():
 		print("Failed to create video dir: {0}".format(err))
 		sys.exit(1)
 
-	fname = fname_format % info["format_info"].get_info()
+	full_fpath = fname_format % info["format_info"].get_info()
+	fdir = os.path.dirname(full_fpath)
+	fname = os.path.basename(full_fpath)
 	fname = sterilize_filename(fname)
-	afile = os.path.join(os.path.curdir, DTYPE_AUDIO, "{0}.ts".format(fname))
-	vfile = os.path.join(os.path.curdir, DTYPE_VIDEO, "{0}.ts".format(fname))
-	thmbnl_file = os.path.join(os.path.curdir, DTYPE_VIDEO, "{0}.jpeg".format(fname))
+	afile = os.path.join(DTYPE_AUDIO, "{0}.ts".format(fname))
+	vfile = os.path.join(DTYPE_VIDEO, "{0}.ts".format(fname))
+	thmbnl_file = os.path.join(DTYPE_VIDEO, "{0}.jpeg".format(fname))
+
 	progress_queue = queue.Queue()
 	total_bytes = 0
 	threads = []
@@ -832,9 +835,17 @@ def main():
 	retcode = 0
 	mfile = ""
 
+	if fdir:
+		try:
+			os.makedirs(fdir, exist_ok=True)
+		except Exception as err:
+			print("Error creating final file directory: {0}".format(err))
+			print("The final file will be placed in the current working directory")
+			fdir = ""
+
 	if aonly:
 		print("Correcting audio container")
-		mfile = "{0}.m4a".format(fname)
+		mfile = os.path.join(fdir, "{0}.m4a".format(fname))
 
 		if thumbnail:
 			retcode = execute(["ffmpeg",
@@ -855,7 +866,7 @@ def main():
 				mfile])
 	else:
 		print("Muxing files")
-		mfile = "{0}.mp4".format(fname)
+		mfile = os.path.join(fdir, "{0}.mp4".format(fname))
 
 		if thumbnail:
 			retcode = execute(["ffmpeg",
