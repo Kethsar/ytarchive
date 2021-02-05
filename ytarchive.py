@@ -599,14 +599,19 @@ def try_delete(fname):
 
 def print_help():
 	fname = os.path.basename(sys.argv[0])
-	print("usage: {0} [OPTIONS] [url] [quality]\n".format(fname))
+	print("usage: {0} [OPTIONS] [url] [quality]".format(fname))
+	print()
+
 	print("\t[url] is a youtube livestream URL. If not provided, you will be")
-	print("\tprompted to enter one.\n")
+	print("\tprompted to enter one.")
+	print()
+
 	print("\t[quality] is a slash-delimited list of video qualities you want")
 	print("\tto be selected for download, from most to least wanted. If not")
 	print("\tprovided, you will be prompted for one, with a list of available")
 	print("\tqualities to choose from. The following valus are valid:")
-	print("\t{0}\n".format(make_quality_list(VIDEO_LABEL_ITAGS)))
+	print("\t{0}".format(make_quality_list(VIDEO_LABEL_ITAGS)))
+	print()
 
 	print("Options:")
 	print("\t-h, --help")
@@ -616,29 +621,35 @@ def print_help():
 	print("\t\tIf this option is not used when a scheduled stream is provided,")
 	print("\t\tyou will be asked if you want to wait or not.")
 	print()
+
 	print("\t-n, --no-wait")
 	print("\t\tDo not wait for a livestream if it's a future scheduled stream.")
 	print()
+
 	print("\t-t, --thumbnail")
 	print("\t\tDownload and embed the stream thumbnail in the finished file.")
 	print("\t\tWhether the thumbnail shows properly depends on your file browser.")
 	print("\t\tWindows' seems to work. Nemo on Linux seemingly does not.")
 	print()
+
 	print("\t-c, --cookies COOKIES_FILE")
 	print("\t\tGive a cookies.txt file that has your youtube cookies. Allows")
 	print("\t\tthe script to access members-only content if you are a member")
 	print("\t\tfor the given stream's user. Must be netscape cookie format.")
 	print()
+
 	print("\t-r, --retry-stream SECONDS")
 	print("\t\tIf waiting for a scheduled livestream, re-check if the stream is")
 	print("\t\tup every SECONDS instead of waiting for the initial scheduled time.")
 	print()
+
 	print("\t-o, --output FILENAME_FORMAT")
 	print("\t\tSet the output file name EXCLUDING THE EXTENSION. Can include")
 	print("\t\tformatting similar to youtube-dl, albeit much more limited.")
 	print("\t\tSee FORMAT OPTIONS below for a list of available format keys.")
 	print("\t\tDefault is '%(title)s-%(id)s'")
 	print()
+
 	print("Examples:")
 	print("\t{0} -w https://www.youtube.com/watch?v=CnWDmKx9cQQ 1080p60/best".format(fname))
 	print("\t{0} https://www.youtube.com/watch?v=ZK1GXnz-1Lw best".format(fname))
@@ -649,10 +660,12 @@ def print_help():
 	print("\t{0} -o '%(channel)s/%(upload_date)s_%(title)s' https://www.youtube.com/watch?v=HxV9UAMN12o best".format(fname))
 	print()
 	print()
+
 	print("FORMAT OPTIONS")
 	print("\tFormat keys provided are made to be the same as they would be for")
 	print("\tyoutube-dl. See https://github.com/ytdl-org/youtube-dl#output-template")
 	print()
+	
 	print("\tid (string): Video identifier")
 	print("\ttitle (string): Video title")
 	print("\tchannel_id (string): Id of the channel")
