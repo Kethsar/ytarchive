@@ -115,6 +115,17 @@ def download_as_text(url):
 	
 	return data.decode("utf-8")
 
+def download_thumbnail(url, fname):
+	try:
+		with urllib.request.urlopen(url, timeout=5) as resp:
+			with open(fname, "wb") as f:
+				f.write(resp.read())
+	except Exception as err:
+		print("Failed to download thumbnail: {0}".format(err))
+		return False
+
+	return True
+
 # Get the base player response object for the given video id
 def get_player_response(vid):
 	vinfo = download_as_text(INFO_URL.format(vid))
@@ -322,8 +333,9 @@ def get_video_info(info):
 
 	player_response = vals["player_response"]
 	selected_qualities = vals["selected_qualities"]
-	video_details = player_response['videoDetails']
-	live_details = player_response["microformat"]["playerMicroformatRenderer"]["liveBroadcastDetails"]
+	video_details = player_response["videoDetails"]
+	pmfr = player_response["microformat"]["playerMicroformatRenderer"]
+	live_details = pmfr["liveBroadcastDetails"]
 	is_live = live_details["isLiveNow"]
 
 	if not is_live and not info["in_progress"]:
@@ -425,6 +437,7 @@ def get_video_info(info):
 
 	if not info["in_progress"]:
 		info["format_info"].set_info(player_response)
+		info["thumbnail"] = pmfr["thumbnail"]["thumbnails"][0]["url"]
 		info["in_progress"] = True
 
 	info["lock"].release()
@@ -552,7 +565,8 @@ def get_video_id(url):
 
 def try_delete(fname):
 	try:
-		os.remove(fname)
+		if os.path.exists(fname):
+			os.remove(fname)
 	except FileNotFoundError:
 		pass
 	except Exception as err:
@@ -579,6 +593,11 @@ def print_help():
 	print()
 	print("\t-n, --no-wait")
 	print("\t\tDo not wait for a livestream if it's a future scheduled stream.")
+	print()
+	print("\t-t, --thumbnail")
+	print("\t\tDownload and embed the stream thumbnail in the finished file.")
+	print("\t\tWhether the thumbnail shows properly depends on your file browser.")
+	print("\t\tWindow's seems to work. Nemo on Linux seemingly does not.")
 	print()
 	print("\t-c, --cookies COOKIES_FILE")
 	print("\t\tGive a cookies.txt file that has your youtube cookies. Allows")
@@ -621,7 +640,9 @@ def main():
 	info = {
 		"lock":  threading.RLock(),
 		"stopping": False,
-		"format_info": FormatInfo()
+		"format_info": FormatInfo(),
+		"in_progress": False,
+		"thumbnail": ""
 	}
 	url = ""
 	vid = ""
@@ -632,9 +653,10 @@ def main():
 	cfile = ""
 	retry_secs = 0
 	fname_format = "%(title)s-%(id)s"
+	thumbnail = False
 
 	try:
-		opts, args = getopt.getopt(sys.argv[1:], "hwnc:r:o:", ["help", "wait", "no-wait", "cookies=", "retry-stream=", "output="])
+		opts, args = getopt.getopt(sys.argv[1:], "hwntc:r:o:", ["help", "wait", "no-wait", "thumbnail", "cookies=", "retry-stream=", "output="])
 	except getopt.GetoptError as err:
 		print("{0}\n".format(err))
 		print_help()
@@ -698,12 +720,12 @@ def main():
 		opener = urllib.request.build_opener(cproc)
 		urllib.request.install_opener(opener)
 
+	# TODO: Just make some info class so you can info.property
 	info["vid"] = vid
 	info["url"] = url
 	info["selected_quality"] = quality
 	info["wait"] = wait
 	info["retry_secs"] = retry_secs
-	info["in_progress"] = False
 
 	if not get_video_info(info):
 		sys.exit(1)
@@ -728,6 +750,7 @@ def main():
 	fname = sterilize_filename(fname)
 	afile = os.path.join(os.path.curdir, DTYPE_AUDIO, "{0}.ts".format(fname))
 	vfile = os.path.join(os.path.curdir, DTYPE_VIDEO, "{0}.ts".format(fname))
+	thmbnl_file = os.path.join(os.path.curdir, DTYPE_VIDEO, "{0}.jpeg".format(fname))
 	progress_queue = queue.Queue()
 	total_bytes = 0
 	threads = []
@@ -735,6 +758,13 @@ def main():
 		DTYPE_AUDIO: 0,
 		DTYPE_VIDEO: 0
 	}
+
+	if thumbnail and info["thumbnail"]:
+		thumbnail = download_thumbnail(info["thumbnail"], thmbnl_file)
+
+		# Failed to download but file itself got created. Remove it
+		if not thumbnail and os.path.exists(thmbnl_file):
+			try_delete(thmbnl_file)
 
 	athread = threading.Thread(target=download_stream, args=(DTYPE_AUDIO, afile, progress_queue, info))
 	threads.append(athread)
@@ -803,11 +833,47 @@ def main():
 	if aonly:
 		print("Correcting audio container")
 		mfile = "{0}.m4a".format(fname)
-		retcode = execute(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", afile, "-c", "copy", mfile])
+
+		if thumbnail:
+			retcode = execute(["ffmpeg",
+				"-hide_banner",
+				"-loglevel", "error",
+				"-i", afile,
+				"-i", thmbnl_file,
+				"-map", "0", "-map", "1",
+				"-c", "copy",
+				"-disposition:v:0", "attached_pic",
+				mfile])
+		else:
+			retcode = execute(["ffmpeg",
+				"-hide_banner",
+				"-loglevel", "error",
+				"-i", afile,
+				"-c", "copy",
+				mfile])
 	else:
 		print("Muxing files")
 		mfile = "{0}.mp4".format(fname)
-		retcode = execute(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", vfile, "-i", afile, "-c", "copy", mfile])
+
+		if thumbnail:
+			retcode = execute(["ffmpeg",
+				"-hide_banner",
+				"-loglevel", "error",
+				"-i", vfile,
+				"-i", thmbnl_file,
+				"-i", afile,
+				"-map", "0", "-map", "1", "-map", "2",
+				"-c", "copy",
+				"-disposition:v:1", "attached_pic",
+				mfile])
+		else:
+			retcode = execute(["ffmpeg",
+				"-hide_banner",
+				"-loglevel", "error",
+				"-i", vfile,
+				"-i", afile,
+				"-c", "copy",
+				mfile])
 
 	if retcode != 0:
 		print("execute returned code {0}. Something must have gone wrong with ffmpeg.".format(retcode))
@@ -815,7 +881,10 @@ def main():
 
 	try_delete(afile)
 	try_delete(vfile)
+	if thumbnail:
+		try_delete(thmbnl_file)
 
+	print()
 	print("Final file: {0}".format(mfile))
 
 if __name__ == "__main__":
