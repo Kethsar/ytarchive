@@ -439,9 +439,10 @@ def get_video_info(info):
 		# Should only be possible if they chose to wait for a stream
 		# and chose only qualities that the streamer ended up not using
 		# i.e. 1080p60/720p60 when the stream is only available in 30 FPS
-		print("\nThe qualities you selected ended up unavailble for this stream")
-		print("You will now have the option to select from the available qualities")
-		selected_qualities.clear()
+		if not found:
+			print("\nThe qualities you selected ended up unavailble for this stream")
+			print("You will now have the option to select from the available qualities")
+			selected_qualities.clear()
 	else:
 		aonly = info["quality"] == VIDEO_LABEL_ITAGS["audio_only"]
 
@@ -591,6 +592,7 @@ def get_video_id(url):
 def try_delete(fname):
 	try:
 		if os.path.exists(fname):
+			print("Deleting file {0}".format(fname))
 			os.remove(fname)
 	except FileNotFoundError:
 		pass
@@ -675,22 +677,24 @@ def print_help():
 def main():
 	# Python may have the GIL but it's better to be safe
 	# RLock so we can lock multiple times in the same thread without deadlocking
+	# TODO: Just make some info class so you can info.property
 	info = {
 		"lock":  threading.RLock(),
 		"stopping": False,
 		"format_info": FormatInfo(),
 		"in_progress": False,
 		"thumbnail": "",
-		"quality": -1
+		"quality": -1,
+		"vid": "",
+		"url": "",
+		"selected_quality": "",
+		"wait": WAIT_ASK,
+		"retry_secs": 0
 	}
-	url = ""
-	vid = ""
-	quality = ""
+
 	opts = None
 	args = None
-	wait = WAIT_ASK
 	cfile = ""
-	retry_secs = 0
 	fname_format = "%(title)s-%(id)s"
 	thumbnail = False
 
@@ -706,9 +710,9 @@ def main():
 			print_help()
 			sys.exit(0)
 		elif o in ("-w", "--wait"):
-			wait = WAIT
+			info["wait"] = WAIT
 		elif o in ("-n", "--no-wait"):
-			wait = NO_WAIT
+			info["wait"] = NO_WAIT
 		elif o in ("-t", "--thumbnail"):
 			thumbnail = True
 		elif o in ("-c", "--cookies"):
@@ -717,7 +721,7 @@ def main():
 			fname_format = a
 		elif o in ("-r", "--retry-stream"):
 			try:
-				retry_secs = abs(int(a)) # Just abs it, don't bother dealing with negatives
+				info["retry_secs"] = abs(int(a)) # Just abs it, don't bother dealing with negatives
 			except Exception:
 				print("retry-stream must be given a number argument. Given {0}".format(a))
 				sys.exit(1)
@@ -725,15 +729,15 @@ def main():
 			assert False, "Unhandled option"
 
 	if len(args) > 1:
-		url = args[0]
-		quality = args[1]
+		info["url"] = args[0]
+		info["selected_quality"] = args[1]
 	elif len(args) > 0:
-		url = args[0]
+		info["url"] = args[0]
 	else:
-		url = input("Enter a youtube video URL: ")
+		info["url"] = input("Enter a youtube video URL: ")
 
-	vid = get_video_id(url)
-	if not vid:
+	info["vid"] = get_video_id(info["url"])
+	if not info["vid"]:
 		print("Could not find video ID")
 		sys.exit(1)
 
@@ -760,13 +764,6 @@ def main():
 		cproc = urllib.request.HTTPCookieProcessor(cjar)
 		opener = urllib.request.build_opener(cproc)
 		urllib.request.install_opener(opener)
-
-	# TODO: Just make some info class so you can info.property
-	info["vid"] = vid
-	info["url"] = url
-	info["selected_quality"] = quality
-	info["wait"] = wait
-	info["retry_secs"] = retry_secs
 
 	if not get_video_info(info):
 		sys.exit(1)
@@ -812,11 +809,13 @@ def main():
 		if not thumbnail and os.path.exists(thmbnl_file):
 			try_delete(thmbnl_file)
 
+	print("Starting download to {0}".format(afile))
 	athread = threading.Thread(target=download_stream, args=(DTYPE_AUDIO, afile, progress_queue, info))
 	threads.append(athread)
 	athread.start()
 
 	if info[DTYPE_VIDEO]:
+		print("Starting download to {0}".format(vfile))
 		vthread = threading.Thread(target=download_stream, args=(DTYPE_VIDEO, vfile, progress_queue, info))
 		threads.append(vthread)
 		vthread.start()
