@@ -253,6 +253,7 @@ def get_playable_player_response(info):
 			print("Reason: {0}".format(playability["reason"]))
 			print("Logged in status: {0}".format(get_logged_in(player_response)))
 			print("If this is a members only stream, you provided a cookies.txt file, and the above 'logged in' status is not '1', please try updating your cookies file.")
+			print("Also check if your cookies file includes '#HttpOnly_' in front of some lines. If it does, delete that part of those lines and try again.")
 			return None
 
 		elif playability_status == PLAYABLE_OFFLINE:
