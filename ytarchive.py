@@ -790,7 +790,10 @@ def print_help():
 	print("\t\tSet the number of threads to use for downloading audio and video")
 	print("\t\tfragments. The total number of threads running will be")
 	print("\t\tTHREAD_COUNT * 2 + 3. Main thread, a thread for each audio and")
-	print("\t\tvideo downloads, and THREAD_COUNT number of fragment downloaders.")
+	print("\t\tvideo download, and THREAD_COUNT number of fragment downloaders")
+	print("\t\tfor both audio and video. The nature of Python means this script")
+	print("\t\twill never use more than a single CPU core no matter how many")
+	print("\t\tthreads are started. Setting this above 5 is not recommended.")
 	print("\t\tDefault is 1.")
 	print()
 
