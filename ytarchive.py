@@ -69,6 +69,39 @@ class FormatInfo:
 		self.finfo["channel"] = sterilize_filename(vid_details["author"])
 		self.finfo["upload_date"] = sterilize_filename(pmfr["uploadDate"].replace("-", ""))
 
+# Info to be sent through the progress queue
+class ProgressInfo:
+	def __init__(self, dtype, byte_count):
+		self.data_type = dtype
+		self.bytes = byte_count
+
+# Fragment data
+class Fragment:
+	def __init__(self, seq, data):
+		self.seq = seq
+		self.data = data
+
+# Miscelaneous information
+class DownloadInfo:
+	def __init__(self):
+		# Python may have the GIL but it's better to be safe
+		# RLock so we can lock multiple times in the same thread without deadlocking
+		self.lock = threading.RLock()
+		self.stopping = False
+		self.format_info = FormatInfo()
+		self.in_progress = False
+		self.thumbnail = ""
+		self.quality = -1
+		self.vid = ""
+		self.url = ""
+		self.selected_quality = ""
+		self.wait = WAIT_ASK
+		self.retry_secs = 0
+		self.thread_count = 1
+		self.download_urls = {
+			DTYPE_VIDEO: "",
+			DTYPE_AUDIO: ""
+		}
 
 # Remove any illegal filename chars
 # Not robust, but the combination of video title and id should prevent other illegal combinations
@@ -221,8 +254,8 @@ def get_playable_player_response(info):
 	player_response = {}
 	secs_late = 0
 	selected_qualities = []
-	vid = info["vid"]
-	url = info["url"]
+	vid = info.vid
+	url = info.url
 
 	while retry:
 		player_response = get_player_response(vid)
@@ -241,8 +274,8 @@ def get_playable_player_response(info):
 		playability = player_response['playabilityStatus']
 		playability_status = playability['status']
 
-		if info["selected_quality"]:
-			selected_qualities = parse_quality_list(list(VIDEO_LABEL_ITAGS.keys()), info["selected_quality"])
+		if info.selected_quality:
+			selected_qualities = parse_quality_list(list(VIDEO_LABEL_ITAGS.keys()), info.selected_quality)
 
 		if playability_status == PLAYABLE_ERROR:
 			print("Playability status: ERROR. Reason: {0}".format(playability["reason"]))
@@ -257,11 +290,11 @@ def get_playable_player_response(info):
 			return None
 
 		elif playability_status == PLAYABLE_OFFLINE:
-			if info["wait"] == NO_WAIT:
+			if info.wait == NO_WAIT:
 				print("Stream appears to be a future scheduled stream, and you opted not to wait.")
 				return None
 
-			if first_wait and info["wait"] == WAIT_ASK:
+			if first_wait and info.wait == WAIT_ASK:
 				if not ask_wait_for_stream(url):
 					return None
 
@@ -270,12 +303,12 @@ def get_playable_player_response(info):
 				if len(selected_qualities) < 1:
 					selected_qualities = get_quality_from_user(list(VIDEO_LABEL_ITAGS.keys()), True)
 
-			if info["retry_secs"] > 0:
+			if info.retry_secs > 0:
 				if first_wait:
-					print("Waiting for stream, retrying every {0} seconds...".format(info["retry_secs"]))
+					print("Waiting for stream, retrying every {0} seconds...".format(info.retry_secs))
 
 				first_wait = False
-				time.sleep(info["retry_secs"])
+				time.sleep(info.retry_secs)
 				continue
 
 			# Jesus fuck youtube, embed some more objects why don't you
@@ -330,10 +363,10 @@ def get_playable_player_response(info):
 # Get necessary video info such as video/audio URLs
 # Stores them in info
 def get_video_info(info):
-	info["lock"].acquire()
+	info.lock.acquire()
 
-	if info["stopping"]:
-		info["lock"].release()
+	if info.stopping:
+		info.lock.release()
 		return
 
 	vals = get_playable_player_response(info)
@@ -347,7 +380,7 @@ def get_video_info(info):
 	live_details = pmfr["liveBroadcastDetails"]
 	is_live = live_details["isLiveNow"]
 
-	if not is_live and not info["in_progress"]:
+	if not is_live and not info.in_progress:
 		# Likely the livestream ended already.
 		# Check if it ended in the last minute.
 		# If not the stream is likely going to stay public.
@@ -370,7 +403,7 @@ def get_video_info(info):
 	
 	formats = player_response["streamingData"]["adaptiveFormats"]
 
-	if info["quality"] < 0:
+	if info.quality < 0:
 		qualities = ["audio_only"]
 		itags = list(VIDEO_LABEL_ITAGS.keys())
 		found = False
@@ -420,18 +453,18 @@ def get_video_info(info):
 				aonly = video_itag == VIDEO_LABEL_ITAGS["audio_only"]
 
 				if aonly:
-					info["quality"] = video_itag
-					info[DTYPE_VIDEO] = ""
+					info.quality = video_itag
+					info.download_urls[DTYPE_VIDEO] = ""
 					found = True
 
 				for fmt in formats:
 					if not aonly and fmt["itag"] == video_itag:
-						info["quality"] = video_itag
-						info[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
+						info.quality = video_itag
+						info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
 						found = True
 						print("Selected quality: {0}".format(q))
 					elif fmt["itag"] == AUDIO_ITAG:
-						info[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
+						info.download_urls[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
 
 				if found:
 					break
@@ -445,62 +478,79 @@ def get_video_info(info):
 			print("You will now have the option to select from the available qualities")
 			selected_qualities.clear()
 	else:
-		aonly = info["quality"] == VIDEO_LABEL_ITAGS["audio_only"]
+		aonly = info.quality == VIDEO_LABEL_ITAGS["audio_only"]
 
 		for fmt in formats:
-			if not aonly and fmt["itag"] == info["quality"]:
-				info[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
+			if not aonly and fmt["itag"] == info.quality:
+				info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
 			elif fmt["itag"] == AUDIO_ITAG:
-				info[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
+				info.download_urls[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
 
 				if aonly:
 					break
 
 	# Grab some extra info on the first run through this function
-	if not info["in_progress"]:
-		info["format_info"].set_info(player_response)
-		info["thumbnail"] = pmfr["thumbnail"]["thumbnails"][0]["url"]
-		info["in_progress"] = True
+	if not info.in_progress:
+		info.format_info.set_info(player_response)
+		info.thumbnail = pmfr["thumbnail"]["thumbnails"][0]["url"]
+		info.in_progress = True
 
-	info["lock"].release()
+	info.lock.release()
 	return True
 
-# Download the given data_type stream to dfile
-# Sends progress info through progress_queue
-def download_stream(data_type, dfile, progress_queue, info):
+# Download a fragment and send it back via data_queue
+def download_frags(data_type, info, seq_queue, data_queue):
 	downloading = True
-	frag = 0
-	url = info[data_type]
-	f = open(dfile, "ab")
+	frag_tries = 0
+	url = info.download_urls[data_type]
 
 	while downloading:
 		# Check if the user decided to cancel this download, and exit gracefully
-		info["lock"].acquire()
-		if info["stopping"]:
-			info["lock"].release()
+		info.lock.acquire()
+		if info.stopping:
+			info.lock.release()
 			break
 
-		info["lock"].release()
+		info.lock.release()
 
 		tries = 0
 		empty_cnt = 0
 		bad_url = False
+		frag = -1
+
+		try:
+			frag = seq_queue.get(timeout=1)
+			frag_tries = 0
+		except queue.Empty:
+			frag_tries += 1
+
+			if frag_tries <= 10:
+				downloading = False
+				
+			continue
 
 		while tries < 10 and empty_cnt < 20:
+			# Check again in case the user opted to stop 
+			info.lock.acquire()
+			if info.stopping:
+				info.lock.release()
+				break
+
+			info.lock.release()
 			buf = b''
 
 			if bad_url:
 				# Check if a new URL is already waiting for us
 				# Else refresh auth by calling get_video_info again
-				info["lock"].acquire()
-				new_url = info[data_type]
+				info.lock.acquire()
+				new_url = info.download_urls[data_type]
 
 				if new_url != url:
 					url = new_url
 				elif get_video_info(info):
-					url = info[data_type]
+					url = info.download_urls[data_type]
 
-				info["lock"].release()
+				info.lock.release()
 				bad_url = False
 
 			try:
@@ -509,12 +559,12 @@ def download_stream(data_type, dfile, progress_queue, info):
 
 				if len(buf) == 0:
 					empty_cnt += 1
+					if empty_cnt < 20:
+						time.sleep(2)
+					
+					continue
 
-				b = f.write(buf)
-				progress_queue.put({
-					"data_type": data_type,
-					"bytes": b
-				})
+				data_queue.put(Fragment(frag, buf))
 				break
 			except urllib.error.HTTPError as err:
 				# 403 means our URLs have likely expired
@@ -523,26 +573,105 @@ def download_stream(data_type, dfile, progress_queue, info):
 					bad_url = True
 				
 				tries += 1
-				time.sleep(2)
+				if tries < 10:
+					time.sleep(2)
 			except http.client.IncompleteRead:
 				# Seems to happen on the last chunk that has data. Maybe.
 				tries += 1
 				if tries >= 10 and len(buf) > 0:
-					b = f.write(buf)
-					progress_queue.put({
-						"data_type": data_type,
-						"bytes": b
-					})
+					data_queue.put(Fragment(frag, buf))
 				else:
 					time.sleep(2)
 			except Exception as err:
 				tries += 1
-				time.sleep(2)
+				if tries < 10:
+					time.sleep(2)
 
 			if tries >= 10 or empty_cnt >= 20:
 				downloading = False
 
-		frag += 1
+# Download the given data_type stream to dfile
+# Sends progress info through progress_queue
+def download_stream(data_type, dfile, progress_queue, info):
+	data_queue = queue.Queue()
+	seq_queue = queue.Queue()
+	cur_frag = 0
+	cur_seq = 0
+	active_downloads = 0
+	tcount = info.thread_count
+	tries = 10
+	dthreads = []
+	data = []
+	f = open(dfile, "ab")
+
+	for i in range(tcount):
+		t = threading.Thread(target=download_frags, args=(data_type, info, seq_queue, data_queue))
+		dthreads.append(t)
+		t.start()
+
+	while True:
+		downloading = False
+
+		for t in dthreads:
+			if t.is_alive():
+				downloading = True
+				break
+
+		if not downloading:
+			break
+
+		# Try not to use too much memory by limiting the number of fragments to store in memory
+		while active_downloads < tcount:
+			seq_queue.put(cur_seq)
+			cur_seq += 1
+			active_downloads += 1
+
+		# Get all available data
+		while True:
+			try:
+				d = data_queue.get_nowait()
+				data.append(d)
+			except queue.Empty:
+				break
+
+		# Wait for 100ms if no data is available
+		if len(data) == 0:
+			time.sleep(0.1)
+			continue
+
+		# Write any fragments in the queue that are next for writing
+		i = 0
+		while i < len(data) and tries > 0:
+			d = data[i]
+			if not d.seq == cur_frag:
+				i += 1
+				continue
+
+			try:
+				b = f.write(d.data)
+				cur_frag += 1
+				progress_queue.put(ProgressInfo(data_type, b))
+
+				data.remove(d)
+				active_downloads -= 1
+				tries = 10
+				i = 0 # Start from the beginning since the next one might have finished downloading earlier
+			except Exception as err:
+				tries -= 1
+				print("\nError when attempting to write fragment {0} to {1}: {2}".format(cur_frag, dfile, err))
+
+				if tries > 0:
+					print("\nWill try {0} more time(s)".format(tries))
+
+		if tries <= 0:
+			print("\nStopping download, something must be wrong...")
+
+			info.lock.acquire()
+			info.stopping = True
+			info.lock.release()
+
+			for t in dthreads:
+				t.join()
 
 	if not f.closed:
 		f.close()
@@ -655,6 +784,14 @@ def print_help():
 	print("\t\tDefault is '%(title)s-%(id)s'")
 	print()
 
+	print("\t--threads THREAD_COUNT")
+	print("\t\tSet the number of threads to use for downloading audio and video")
+	print("\t\tfragments. The total number of threads running will be")
+	print("\t\tTHREAD_COUNT * 2 + 3. Main thread, a thread for each audio and")
+	print("\t\tvideo downloads, and THREAD_COUNT number of fragment downloaders.")
+	print("\t\tDefault is 1.")
+	print()
+
 	print("Examples:")
 	print("\t{0} -w https://www.youtube.com/watch?v=CnWDmKx9cQQ 1080p60/best".format(fname))
 	print("\t{0} https://www.youtube.com/watch?v=ZK1GXnz-1Lw best".format(fname))
@@ -678,22 +815,8 @@ def print_help():
 	print("\tupload_date (string): Technically stream date (YYYYMMDD)")
 
 def main():
-	# Python may have the GIL but it's better to be safe
-	# RLock so we can lock multiple times in the same thread without deadlocking
 	# TODO: Just make some info class so you can info.property
-	info = {
-		"lock":  threading.RLock(),
-		"stopping": False,
-		"format_info": FormatInfo(),
-		"in_progress": False,
-		"thumbnail": "",
-		"quality": -1,
-		"vid": "",
-		"url": "",
-		"selected_quality": "",
-		"wait": WAIT_ASK,
-		"retry_secs": 0
-	}
+	info = DownloadInfo()
 
 	opts = None
 	args = None
@@ -702,7 +825,9 @@ def main():
 	thumbnail = False
 
 	try:
-		opts, args = getopt.getopt(sys.argv[1:], "hwntc:r:o:", ["help", "wait", "no-wait", "thumbnail", "cookies=", "retry-stream=", "output="])
+		opts, args = getopt.getopt(sys.argv[1:],
+			"hwntc:r:o:",
+			["help", "wait", "no-wait", "thumbnail", "cookies=", "retry-stream=", "output=", "threads="])
 	except getopt.GetoptError as err:
 		print("{0}\n".format(err))
 		print_help()
@@ -713,18 +838,20 @@ def main():
 			print_help()
 			sys.exit(0)
 		elif o in ("-w", "--wait"):
-			info["wait"] = WAIT
+			info.wait = WAIT
 		elif o in ("-n", "--no-wait"):
-			info["wait"] = NO_WAIT
+			info.wait = NO_WAIT
 		elif o in ("-t", "--thumbnail"):
 			thumbnail = True
 		elif o in ("-c", "--cookies"):
 			cfile = a
 		elif o in ("-o", "--output"):
 			fname_format = a
+		elif o == "--threads":
+			info.thread_count = abs(int(a))
 		elif o in ("-r", "--retry-stream"):
 			try:
-				info["retry_secs"] = abs(int(a)) # Just abs it, don't bother dealing with negatives
+				info.retry_secs = abs(int(a)) # Just abs it, don't bother dealing with negatives
 			except Exception:
 				print("retry-stream must be given a number argument. Given {0}".format(a))
 				sys.exit(1)
@@ -732,21 +859,21 @@ def main():
 			assert False, "Unhandled option"
 
 	if len(args) > 1:
-		info["url"] = args[0]
-		info["selected_quality"] = args[1]
+		info.url = args[0]
+		info.selected_quality = args[1]
 	elif len(args) > 0:
-		info["url"] = args[0]
+		info.url = args[0]
 	else:
-		info["url"] = input("Enter a youtube video URL: ")
+		info.url = input("Enter a youtube video URL: ")
 
-	info["vid"] = get_video_id(info["url"])
-	if not info["vid"]:
+	info.vid = get_video_id(info.url)
+	if not info.vid:
 		print("Could not find video ID")
 		sys.exit(1)
 
 	# Test filename format to make sure a valid one was given
 	try:
-		fname_format % info["format_info"].get_info()
+		fname_format % info.format_info.get_info()
 	except KeyError as err:
 		print("Unknown output format key: {0}".format(err))
 		sys.exit(1)
@@ -788,12 +915,12 @@ def main():
 		sys.exit(1)
 
 	# Setup file name and directories
-	full_fpath = fname_format % info["format_info"].get_info()
+	full_fpath = fname_format % info.format_info.get_info()
 	fdir = os.path.dirname(full_fpath)
 	fname = os.path.basename(full_fpath)
 	fname = sterilize_filename(fname)
 	afile = os.path.join(DTYPE_AUDIO, "{0}.f{1}.ts".format(fname, AUDIO_ITAG))
-	vfile = os.path.join(DTYPE_VIDEO, "{0}.f{1}.ts".format(fname, info["quality"]))
+	vfile = os.path.join(DTYPE_VIDEO, "{0}.f{1}.ts".format(fname, info.quality))
 	thmbnl_file = os.path.join(DTYPE_VIDEO, "{0}.jpeg".format(fname))
 
 	progress_queue = queue.Queue()
@@ -805,8 +932,8 @@ def main():
 	}
 
 	# Grab the thumbnail for the livestream for embedding later
-	if thumbnail and info["thumbnail"]:
-		thumbnail = download_thumbnail(info["thumbnail"], thmbnl_file)
+	if thumbnail and info.thumbnail:
+		thumbnail = download_thumbnail(info.thumbnail, thmbnl_file)
 
 		# Failed to download but file itself got created. Remove it
 		if not thumbnail and os.path.exists(thmbnl_file):
@@ -817,7 +944,7 @@ def main():
 	threads.append(athread)
 	athread.start()
 
-	if info[DTYPE_VIDEO]:
+	if info.download_urls[DTYPE_VIDEO]:
 		print("Starting download to {0}".format(vfile))
 		vthread = threading.Thread(target=download_stream, args=(DTYPE_VIDEO, vfile, progress_queue, info))
 		threads.append(vthread)
@@ -832,15 +959,11 @@ def main():
 			if t.is_alive():
 				alive = True
 				break
-		
-		if not alive:
-			break
 
 		try:
 			progress = progress_queue.get(timeout=1)
-
-			total_bytes += progress["bytes"]
-			frags[progress["data_type"]] += 1
+			total_bytes += progress.bytes
+			frags[progress.data_type] += 1
 
 			print("\rVideo fragments: {0}; Audio fragments: {1}; Total Downloaded: {2}{3}{4}".format(
 					frags[DTYPE_VIDEO],
@@ -853,16 +976,20 @@ def main():
 			pass
 		except KeyboardInterrupt:
 			# Attempt to shutdown gracefully by stopping the download threads
-			info["lock"].acquire()
-			info["stopping"] = True
-			info["lock"].release()
+			info.lock.acquire()
+			info.stopping = True
+			info.lock.release()
 			print("\nKeyboard Interrupt, stopping download...")
+
 			for t in threads:
 				t.join()
 			sys.exit(2)
+		
+		if not alive:
+			break
 
 	print()
-	aonly = info["quality"] == VIDEO_LABEL_ITAGS["audio_only"]
+	aonly = info.quality == VIDEO_LABEL_ITAGS["audio_only"]
 
 	# Attempt to mux the video and audio files using ffmpeg
 	if not aonly and frags[DTYPE_AUDIO] != frags[DTYPE_VIDEO]:
