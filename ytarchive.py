@@ -531,7 +531,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 			continue
 
-		while FRAG_MAX_TRIES < 10 and empty_cnt < FRAG_MAX_EMPTY:
+		while tries < FRAG_MAX_TRIES and empty_cnt < FRAG_MAX_EMPTY:
 			# Check again in case the user opted to stop 
 			info.lock.acquire()
 			if info.stopping:
@@ -575,21 +575,21 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					bad_url = True
 				
 				tries += 1
-				if FRAG_MAX_TRIES < 10:
+				if tries < FRAG_MAX_TRIES:
 					time.sleep(2)
 			except http.client.IncompleteRead:
 				# Seems to happen on the last chunk that has data. Maybe.
 				tries += 1
-				if FRAG_MAX_TRIES >= 10 and len(buf) > 0:
+				if tries >= FRAG_MAX_TRIES and len(buf) > 0:
 					data_queue.put(Fragment(frag, buf))
 				else:
 					time.sleep(2)
 			except Exception as err:
 				tries += 1
-				if FRAG_MAX_TRIES < 10:
+				if tries < FRAG_MAX_TRIES:
 					time.sleep(2)
 
-			if FRAG_MAX_TRIES >= 10 or empty_cnt >= FRAG_MAX_EMPTY:
+			if tries >= FRAG_MAX_TRIES or empty_cnt >= FRAG_MAX_EMPTY:
 				downloading = False
 
 # Download the given data_type stream to dfile
