@@ -524,9 +524,9 @@ def download_frags(data_type, info, seq_queue, data_queue):
 		except queue.Empty:
 			frag_tries += 1
 
-			if frag_tries <= 10:
+			if frag_tries >= 10:
 				downloading = False
-				
+
 			continue
 
 		while tries < 10 and empty_cnt < 20:
