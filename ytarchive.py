@@ -612,13 +612,15 @@ def print_help():
 	print("\t[quality] is a slash-delimited list of video qualities you want")
 	print("\tto be selected for download, from most to least wanted. If not")
 	print("\tprovided, you will be prompted for one, with a list of available")
-	print("\tqualities to choose from. The following valus are valid:")
+	print("\tqualities to choose from. The following values are valid:")
 	print("\t{0}".format(make_quality_list(VIDEO_LABEL_ITAGS)))
 	print()
 
 	print("Options:")
 	print("\t-h, --help")
 	print("\t\tShow this help message.")
+	print()
+
 	print("\t-w, --wait")
 	print("\t\tWait for a livestream if it's a future scheduled stream.")
 	print("\t\tIf this option is not used when a scheduled stream is provided,")
@@ -790,8 +792,8 @@ def main():
 	fdir = os.path.dirname(full_fpath)
 	fname = os.path.basename(full_fpath)
 	fname = sterilize_filename(fname)
-	afile = os.path.join(DTYPE_AUDIO, "{0}.ts".format(fname))
-	vfile = os.path.join(DTYPE_VIDEO, "{0}.ts".format(fname))
+	afile = os.path.join(DTYPE_AUDIO, "{0}.f{1}.ts".format(fname, AUDIO_ITAG))
+	vfile = os.path.join(DTYPE_VIDEO, "{0}.f{1}.ts".format(fname, info["quality"]))
 	thmbnl_file = os.path.join(DTYPE_VIDEO, "{0}.jpeg".format(fname))
 
 	progress_queue = queue.Queue()
@@ -840,7 +842,13 @@ def main():
 			total_bytes += progress["bytes"]
 			frags[progress["data_type"]] += 1
 
-			print("\rVideo fragments: {0}; Audio fragments: {1}; Total Downloaded: {2}     ".format(frags[DTYPE_VIDEO], frags[DTYPE_AUDIO], format_size(total_bytes)), end="")
+			print("\rVideo fragments: {0}; Audio fragments: {1}; Total Downloaded: {2}{3}{4}".format(
+					frags[DTYPE_VIDEO],
+					frags[DTYPE_AUDIO],
+					format_size(total_bytes),
+					" "*5,
+					"\b"*5),
+				end="")
 		except queue.Empty:
 			pass
 		except KeyboardInterrupt:
