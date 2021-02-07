@@ -25,6 +25,13 @@ PLAYABLE_ERROR = "ERROR"
 BAD_CHARS = '<>:"/\\|?*'
 DTYPE_AUDIO = "audio"
 DTYPE_VIDEO = "video"
+DEFAULT_VIDEO_QUALITY = "best"
+RECHECK_TIME = 15
+WAIT_ASK = 0
+WAIT = 1
+NO_WAIT = 2
+FRAG_MAX_TRIES = 10
+FRAG_MAX_EMPTY = 10
 
 # https://gist.github.com/AgentOak/34d47c65b1d28829bb17c24c04a0096f
 AUDIO_ITAG = 140
@@ -39,11 +46,6 @@ VIDEO_LABEL_ITAGS = {
 	'1080p': 137,
 	'1080p60': 299,
 }
-DEFAULT_VIDEO_QUALITY = "best"
-RECHECK_TIME = 15
-WAIT_ASK = 0
-WAIT = 1
-NO_WAIT = 2
 
 # Simple class to more easily keep track of what fields are available for
 # file name formatting
@@ -524,12 +526,12 @@ def download_frags(data_type, info, seq_queue, data_queue):
 		except queue.Empty:
 			frag_tries += 1
 
-			if frag_tries >= 10:
+			if frag_tries >= FRAG_MAX_TRIES:
 				downloading = False
 
 			continue
 
-		while tries < 10 and empty_cnt < 20:
+		while FRAG_MAX_TRIES < 10 and empty_cnt < FRAG_MAX_EMPTY:
 			# Check again in case the user opted to stop 
 			info.lock.acquire()
 			if info.stopping:
@@ -559,7 +561,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 				if len(buf) == 0:
 					empty_cnt += 1
-					if empty_cnt < 20:
+					if empty_cnt < FRAG_MAX_EMPTY:
 						time.sleep(2)
 					
 					continue
@@ -573,21 +575,21 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					bad_url = True
 				
 				tries += 1
-				if tries < 10:
+				if FRAG_MAX_TRIES < 10:
 					time.sleep(2)
 			except http.client.IncompleteRead:
 				# Seems to happen on the last chunk that has data. Maybe.
 				tries += 1
-				if tries >= 10 and len(buf) > 0:
+				if FRAG_MAX_TRIES >= 10 and len(buf) > 0:
 					data_queue.put(Fragment(frag, buf))
 				else:
 					time.sleep(2)
 			except Exception as err:
 				tries += 1
-				if tries < 10:
+				if FRAG_MAX_TRIES < 10:
 					time.sleep(2)
 
-			if tries >= 10 or empty_cnt >= 20:
+			if FRAG_MAX_TRIES >= 10 or empty_cnt >= FRAG_MAX_EMPTY:
 				downloading = False
 
 # Download the given data_type stream to dfile
