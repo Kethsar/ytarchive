@@ -386,10 +386,12 @@ def get_video_info(info):
 	# except maybe whether the livestream is online
 	update_delta = time.time() - info.last_updated
 	if update_delta < RECHECK_TIME:
+		info.lock.release()
 		return False
 
 	vals = get_playable_player_response(info)
 	if not vals:
+		info.lock.release()
 		return False
 
 	player_response = vals["player_response"]
@@ -408,10 +410,12 @@ def get_video_info(info):
 			url = player_response["streamingData"]["adaptiveFormats"][0]["url"]
 			if not is_fragmented(url):
 				print("Livestream has been processed, use youtube-dl instead.")
+				info.lock.release()
 				return False
 		else:
 			print("Livestream is offline, should have started, but has no end timestamp.")
 			print("You could try again, or try youtube-dl.")
+			info.lock.release()
 			return False
 	
 	formats = player_response["streamingData"]["adaptiveFormats"]
