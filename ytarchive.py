@@ -16,7 +16,7 @@ import subprocess
 import getopt
 
 # Constants
-INFO_URL = "https://www.youtube.com/get_video_info?video_id={0}"
+INFO_URL = "https://www.youtube.com/get_video_info?video_id={0}&el=detailpage"
 HTML_VIDEO_LINK_TAG = '<link rel="canonical" href="https://www.youtube.com/watch?v='
 PLAYABLE_OK = "OK"
 PLAYABLE_OFFLINE = "LIVE_STREAM_OFFLINE"
@@ -37,14 +37,14 @@ FRAG_MAX_EMPTY = 10
 AUDIO_ITAG = 140
 VIDEO_LABEL_ITAGS = {
 	'audio_only': 0, 
-	'144p': 160,
-	'240p': 133,
-	'360p': 134,
-	'480p': 135,
-	'720p': 136,
-	'720p60': 298,
-	'1080p': 137,
-	'1080p60': 299,
+	'144p': {"h264": 160, "vp9": 278},
+	'240p': {"h264": 133, "vp9": 242},
+	'360p': {"h264": 134, "vp9": 243},
+	'480p': {"h264": 135, "vp9": 244},
+	'720p': {"h264": 136, "vp9": 247},
+	'720p60': {"h264": 298, "vp9": 302},
+	'1080p': {"h264": 137, "vp9": 248},
+	'1080p60': {"h264": 299, "vp9": 303},
 }
 
 # Simple class to more easily keep track of what fields are available for
@@ -89,15 +89,16 @@ class DownloadInfo:
 		# Python may have the GIL but it's better to be safe
 		# RLock so we can lock multiple times in the same thread without deadlocking
 		self.lock = threading.RLock()
-		self.stopping = False
 		self.format_info = FormatInfo()
+		self.stopping = False
 		self.in_progress = False
+		self.vp9 = False
 		self.thumbnail = ""
-		self.quality = -1
 		self.vid = ""
 		self.url = ""
 		self.selected_quality = ""
 		self.wait = WAIT_ASK
+		self.quality = -1
 		self.retry_secs = 0
 		self.thread_count = 1
 		self.download_urls = {
@@ -289,8 +290,6 @@ def get_playable_player_response(info):
 			print("Logged in status: {0}".format(get_logged_in(player_response)))
 			print("If this is a members only stream, you provided a cookies.txt file, and the above 'logged in' status is not '1', please try updating your cookies file.")
 			print("Also check if your cookies file includes '#HttpOnly_' in front of some lines. If it does, delete that part of those lines and try again.")
-			print("If everything seems fine, it might be the channel somehow disabled our method of download, and made the video only viewable in the browser.")
-			print("I may or may not look into how youtube-dl gets around this.")
 			return None
 
 		elif playability_status == PLAYABLE_OFFLINE:
@@ -412,6 +411,7 @@ def get_video_info(info):
 		found = False
 
 		# Generate a list of available qualities, sorted in order from best to worst
+		# Assuming if VP9 is available, h264 should be available for that quality too
 		for fmt in formats:
 			if fmt["mimeType"].startswith("video/mp4"):
 				qlabel = fmt["qualityLabel"].lower()
@@ -461,11 +461,22 @@ def get_video_info(info):
 					found = True
 
 				for fmt in formats:
-					if not aonly and fmt["itag"] == video_itag:
-						info.quality = video_itag
-						info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
-						found = True
-						print("Selected quality: {0}".format(q))
+					if not aonly:
+						if fmt["itag"] == video_itag["h264"] and not found:
+							info.quality = fmt["itag"]
+							info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
+							found = True
+							print("Selected quality: {0} (H264)".format(q))
+						elif info.vp9 and fmt["itag"] == video_itag["vp9"]:
+							info.quality = fmt["itag"]
+							info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
+							if not found:
+								print("Selected quality: {0} (VP9)".format(q))
+								found = True
+							else:
+								print("VP9 of the same quality found, using that instead")
+						elif fmt["itag"] == AUDIO_ITAG:
+							info.download_urls[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
 					elif fmt["itag"] == AUDIO_ITAG:
 						info.download_urls[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
 
@@ -770,6 +781,11 @@ def print_help():
 	print("\t\tWindows' seems to work. Nemo on Linux seemingly does not.")
 	print()
 
+	print("\t--vp9")
+	print("\t\tIf there is a VP9 version of your selected video quality,")
+	print("\t\tdownload that instead of the usual h264.")
+	print()
+
 	print("\t-c, --cookies COOKIES_FILE")
 	print("\t\tGive a cookies.txt file that has your youtube cookies. Allows")
 	print("\t\tthe script to access members-only content if you are a member")
@@ -833,7 +849,7 @@ def main():
 	try:
 		opts, args = getopt.getopt(sys.argv[1:],
 			"hwntc:r:o:",
-			["help", "wait", "no-wait", "thumbnail", "cookies=", "retry-stream=", "output=", "threads="])
+			["help", "wait", "no-wait", "thumbnail", "vp9", "cookies=", "retry-stream=", "output=", "threads="])
 	except getopt.GetoptError as err:
 		print("{0}\n".format(err))
 		print_help()
@@ -849,6 +865,8 @@ def main():
 			info.wait = NO_WAIT
 		elif o in ("-t", "--thumbnail"):
 			thumbnail = True
+		elif o == "--vp9":
+			info.vp9 = True
 		elif o in ("-c", "--cookies"):
 			cfile = a
 		elif o in ("-o", "--output"):
