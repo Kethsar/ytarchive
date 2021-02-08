@@ -289,6 +289,8 @@ def get_playable_player_response(info):
 			print("Logged in status: {0}".format(get_logged_in(player_response)))
 			print("If this is a members only stream, you provided a cookies.txt file, and the above 'logged in' status is not '1', please try updating your cookies file.")
 			print("Also check if your cookies file includes '#HttpOnly_' in front of some lines. If it does, delete that part of those lines and try again.")
+			print("If everything seems fine, it might be the channel somehow disabled our method of download, and made the video only viewable in the browser.")
+			print("I may or may not look into how youtube-dl gets around this.")
 			return None
 
 		elif playability_status == PLAYABLE_OFFLINE:
@@ -384,24 +386,18 @@ def get_video_info(info):
 
 	if not is_live and not info.in_progress:
 		# Likely the livestream ended already.
-		# Check if it ended in the last minute.
-		# If not the stream is likely going to stay public.
+		# Check if the stream has been mostly processed.
+		# If not then download it. Else youtube-dl is a better choice.
 		if "endTimestamp" in live_details:
-			# Only appears if the stream was actually live and ended.
-			# You'd think if we are in this code block it would be there but I don't trust anything
-			end_timestamp = live_details["endTimestamp"]
+			# Assume that all formats will be fully processed if one is, and vice versa
+			url = player_response["streamingData"]["adaptiveFormats"][0]["url"]
+			queries = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
 
-			#format 2021-01-26T16:47:42+00:00
-			end_time = calendar.timegm(time.strptime(end_timestamp, "%Y-%m-%dT%H:%M:%S%z"))
-			elapsed = time.time() - end_time
-
-			 # Check if two hours have passed, or the formats key has appeared
-			 # Formats key means the video has processed far enough to not
-			 # be downloadable with our usual method
-			 # TODO: Check for dashManifestUrl if formats has appeared. That should allow downloading still
-			if elapsed > 60*60*2 or "formats" in player_response["streamingData"]:
-				print("Livestream has been offline for more than two hours, or has been processed too far for us to download.")
-				print("It's likely to stay public, try using youtube-dl.")
+			# Per anon, there will be a noclen query parameter if the given URLs
+			# are meant to be downloaded in fragments. Else it will have a clen
+			# parameter obviously specifying content length.
+			if "noclen" not in queries:
+				print("Livestream has been processed, use youtube-dl instead.")
 				return False
 		else:
 			print("Livestream is offline, should have started, but has no end timestamp.")
@@ -826,7 +822,6 @@ def print_help():
 	print("\tupload_date (string): Technically stream date (YYYYMMDD)")
 
 def main():
-	# TODO: Just make some info class so you can info.property
 	info = DownloadInfo()
 
 	opts = None
