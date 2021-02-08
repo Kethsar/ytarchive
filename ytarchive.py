@@ -376,163 +376,157 @@ def is_fragmented(url):
 # Get necessary video info such as video/audio URLs
 # Stores them in info
 def get_video_info(info):
-	info.lock.acquire()
-
-	if info.stopping:
-		info.lock.release()
-		return False
-
-	# Almost nothing we care about is likely to change in 15 seconds,
-	# except maybe whether the livestream is online
-	update_delta = time.time() - info.last_updated
-	if update_delta < RECHECK_TIME:
-		info.lock.release()
-		return False
-
-	vals = get_playable_player_response(info)
-	if not vals:
-		info.lock.release()
-		return False
-
-	player_response = vals["player_response"]
-	selected_qualities = vals["selected_qualities"]
-	video_details = player_response["videoDetails"]
-	pmfr = player_response["microformat"]["playerMicroformatRenderer"]
-	live_details = pmfr["liveBroadcastDetails"]
-	is_live = live_details["isLiveNow"]
-
-	if not is_live and not info.in_progress:
-		# Likely the livestream ended already.
-		# Check if the stream has been mostly processed.
-		# If not then download it. Else youtube-dl is a better choice.
-		if "endTimestamp" in live_details:
-			# Assume that all formats will be fully processed if one is, and vice versa
-			url = player_response["streamingData"]["adaptiveFormats"][0]["url"]
-			if not is_fragmented(url):
-				print("Livestream has been processed, use youtube-dl instead.")
-				info.lock.release()
-				return False
-		else:
-			print("Livestream is offline, should have started, but has no end timestamp.")
-			print("You could try again, or try youtube-dl.")
-			info.lock.release()
+	with info.lock: # Because I forgot some releases, this is worth the extra indent
+		if info.stopping:
 			return False
-	
-	formats = player_response["streamingData"]["adaptiveFormats"]
 
-	if info.quality < 0:
-		qualities = ["audio_only"]
-		itags = list(VIDEO_LABEL_ITAGS.keys())
-		found = False
+		# Almost nothing we care about is likely to change in 15 seconds,
+		# except maybe whether the livestream is online
+		update_delta = time.time() - info.last_updated
+		if update_delta < RECHECK_TIME:
+			return False
 
-		# Generate a list of available qualities, sorted in order from best to worst
-		# Assuming if VP9 is available, h264 should be available for that quality too
-		for fmt in formats:
-			if fmt["mimeType"].startswith("video/mp4"):
-				qlabel = fmt["qualityLabel"].lower()
-				priority = itags.index(qlabel)
-				idx = 0
+		vals = get_playable_player_response(info)
+		if not vals:
+			return False
 
-				for q in qualities:
-					p = itags.index(q)
-					if p > priority:
-						break
-					
-					idx += 1
+		player_response = vals["player_response"]
+		selected_qualities = vals["selected_qualities"]
+		video_details = player_response["videoDetails"]
+		pmfr = player_response["microformat"]["playerMicroformatRenderer"]
+		live_details = pmfr["liveBroadcastDetails"]
+		is_live = live_details["isLiveNow"]
 
-				qualities.insert(idx, qlabel)
+		if not is_live and not info.in_progress:
+			# Likely the livestream ended already.
+			# Check if the stream has been mostly processed.
+			# If not then download it. Else youtube-dl is a better choice.
+			if "endTimestamp" in live_details:
+				# Assume that all formats will be fully processed if one is, and vice versa
+				url = player_response["streamingData"]["adaptiveFormats"][0]["url"]
+				if not is_fragmented(url):
+					print("Livestream has been processed, use youtube-dl instead.")
+					return False
+			else:
+				print("Livestream is offline, should have started, but has no end timestamp.")
+				print("You could try again, or try youtube-dl.")
+				return False
+		
+		formats = player_response["streamingData"]["adaptiveFormats"]
 
-		while not found:
-			if len(selected_qualities) == 0:
-				selected_qualities = get_quality_from_user(qualities)
+		if info.quality < 0:
+			qualities = ["audio_only"]
+			itags = list(VIDEO_LABEL_ITAGS.keys())
+			found = False
 
-			for q in selected_qualities:
-				q = q.strip()
+			# Generate a list of available qualities, sorted in order from best to worst
+			# Assuming if VP9 is available, h264 should be available for that quality too
+			for fmt in formats:
+				if fmt["mimeType"].startswith("video/mp4"):
+					qlabel = fmt["qualityLabel"].lower()
+					priority = itags.index(qlabel)
+					idx = 0
 
-				# Find the best quality of those availble.
-				# This is why we sorted the list as we made it.
-				if q == "best":
-					itags = list(VIDEO_LABEL_ITAGS.keys())
-					best = 0
+					for q in qualities:
+						p = itags.index(q)
+						if p > priority:
+							break
+						
+						idx += 1
+
+					qualities.insert(idx, qlabel)
+
+			while not found:
+				if len(selected_qualities) == 0:
+					selected_qualities = get_quality_from_user(qualities)
+
+				for q in selected_qualities:
+					q = q.strip()
+
+					# Find the best quality of those availble.
+					# This is why we sorted the list as we made it.
+					if q == "best":
+						itags = list(VIDEO_LABEL_ITAGS.keys())
+						best = 0
+
+						for fmt in formats:
+							if 'qualityLabel' not in fmt:
+								continue
+
+							qlabel = fmt["qualityLabel"].lower()
+							priority = itags.index(qlabel)
+
+							if priority > best:
+								best = priority
+
+						q = itags[best]
+
+					video_itag = VIDEO_LABEL_ITAGS[q]
+					aonly = video_itag == VIDEO_LABEL_ITAGS["audio_only"]
+
+					if aonly:
+						info.quality = video_itag
+						info.download_urls[DTYPE_VIDEO] = ""
+						found = True
 
 					for fmt in formats:
-						if 'qualityLabel' not in fmt:
-							continue
-
-						qlabel = fmt["qualityLabel"].lower()
-						priority = itags.index(qlabel)
-
-						if priority > best:
-							best = priority
-
-					q = itags[best]
-
-				video_itag = VIDEO_LABEL_ITAGS[q]
-				aonly = video_itag == VIDEO_LABEL_ITAGS["audio_only"]
-
-				if aonly:
-					info.quality = video_itag
-					info.download_urls[DTYPE_VIDEO] = ""
-					found = True
-
-				for fmt in formats:
-					if not aonly:
-						if fmt["itag"] == video_itag["h264"] and not found:
-							info.quality = fmt["itag"]
-							info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
-							found = True
-							print("Selected quality: {0} (H264)".format(q))
-						elif info.try_vp9 and fmt["itag"] == video_itag["vp9"]:
-							info.quality = fmt["itag"]
-							info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
-							info.is_vp9 = True
-
-							if not found:
-								print("Selected quality: {0} (VP9)".format(q))
+						if not aonly:
+							if fmt["itag"] == video_itag["h264"] and not found:
+								info.quality = fmt["itag"]
+								info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
 								found = True
-							else:
-								print("VP9 of the same quality found, using that instead")
+								print("Selected quality: {0} (H264)".format(q))
+							elif info.try_vp9 and fmt["itag"] == video_itag["vp9"]:
+								info.quality = fmt["itag"]
+								info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
+								info.is_vp9 = True
+
+								if not found:
+									print("Selected quality: {0} (VP9)".format(q))
+									found = True
+								else:
+									print("VP9 of the same quality found, using that instead")
+							elif fmt["itag"] == AUDIO_ITAG:
+								info.download_urls[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
 						elif fmt["itag"] == AUDIO_ITAG:
 							info.download_urls[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
-					elif fmt["itag"] == AUDIO_ITAG:
-						info.download_urls[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
 
-				if found:
-					break
-		
-		# None of the qualities the user gave were available
-		# Should only be possible if they chose to wait for a stream
-		# and chose only qualities that the streamer ended up not using
-		# i.e. 1080p60/720p60 when the stream is only available in 30 FPS
-		if not found:
-			print("\nThe qualities you selected ended up unavailble for this stream")
-			print("You will now have the option to select from the available qualities")
-			selected_qualities.clear()
-	else:
-		aonly = info.quality == VIDEO_LABEL_ITAGS["audio_only"]
+					if found:
+						break
+			
+			# None of the qualities the user gave were available
+			# Should only be possible if they chose to wait for a stream
+			# and chose only qualities that the streamer ended up not using
+			# i.e. 1080p60/720p60 when the stream is only available in 30 FPS
+			if not found:
+				print("\nThe qualities you selected ended up unavailble for this stream")
+				print("You will now have the option to select from the available qualities")
+				selected_qualities.clear()
+		else:
+			aonly = info.quality == VIDEO_LABEL_ITAGS["audio_only"]
 
-		for fmt in formats:
-			# Don't bother with refreshing the URL if it's not the kind we can even use
-			if not is_fragmented(fmt["url"]):
-				continue
+			for fmt in formats:
+				# Don't bother with refreshing the URL if it's not the kind we can even use
+				if not is_fragmented(fmt["url"]):
+					continue
 
-			if not aonly and fmt["itag"] == info.quality:
-				info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
-			elif fmt["itag"] == AUDIO_ITAG:
-				info.download_urls[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
+				if not aonly and fmt["itag"] == info.quality:
+					info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
+				elif fmt["itag"] == AUDIO_ITAG:
+					info.download_urls[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
 
-				if aonly:
-					break
+					if aonly:
+						break
 
-	# Grab some extra info on the first run through this function
-	if not info.in_progress:
-		info.format_info.set_info(player_response)
-		info.thumbnail = pmfr["thumbnail"]["thumbnails"][0]["url"]
-		info.in_progress = True
+		# Grab some extra info on the first run through this function
+		if not info.in_progress:
+			info.format_info.set_info(player_response)
+			info.thumbnail = pmfr["thumbnail"]["thumbnails"][0]["url"]
+			info.in_progress = True
 
-	info.is_live = is_live
-	info.last_updated = time.time()
-	info.lock.release()
+		info.is_live = is_live
+		info.last_updated = time.time()
+
 	return True
 
 # Download a fragment and send it back via data_queue
@@ -543,12 +537,9 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 	while downloading:
 		# Check if the user decided to cancel this download, and exit gracefully
-		info.lock.acquire()
-		if info.stopping:
-			info.lock.release()
-			break
-
-		info.lock.release()
+		with info.lock:
+			if info.stopping:
+				break
 
 		tries = 0
 		empty_cnt = 0
@@ -577,27 +568,24 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 		while tries < FRAG_MAX_TRIES and empty_cnt < FRAG_MAX_EMPTY:
 			# Check again in case the user opted to stop 
-			info.lock.acquire()
-			if info.stopping:
-				info.lock.release()
-				downloading = False
-				break
+			with info.lock:
+				if info.stopping:
+					downloading = False
+					break
 
-			info.lock.release()
 			buf = b''
 
 			if bad_url:
 				# Check if a new URL is already waiting for us
 				# Else refresh auth by calling get_video_info again
-				info.lock.acquire()
-				new_url = info.download_urls[data_type]
+				with info.lock:
+					new_url = info.download_urls[data_type]
 
-				if new_url != url:
-					url = new_url
-				elif get_video_info(info):
-					url = info.download_urls[data_type]
+					if new_url != url:
+						url = new_url
+					elif get_video_info(info):
+						url = info.download_urls[data_type]
 
-				info.lock.release()
 				bad_url = False
 
 			try:
@@ -718,9 +706,8 @@ def download_stream(data_type, dfile, progress_queue, info):
 		if tries <= 0:
 			print("\nStopping download, something must be wrong...")
 
-			info.lock.acquire()
-			info.stopping = True
-			info.lock.release()
+			with info.lock:
+				info.stopping = True
 
 			for t in dthreads:
 				t.join()
@@ -882,7 +869,6 @@ def main():
 	cfile = ""
 	fname_format = "%(title)s-%(id)s"
 	thumbnail = False
-	vfrag_ext = "ts"
 
 	try:
 		opts, args = getopt.getopt(sys.argv[1:],
@@ -987,11 +973,8 @@ def main():
 		print("Expanded output file path: {0}".format(full_fpath))
 		sys.exit(1)
 
-	if info.is_vp9:
-		vfrag_ext = "webm"
-
 	afile = os.path.join(DTYPE_AUDIO, "{0}.f{1}.ts".format(fname, AUDIO_ITAG))
-	vfile = os.path.join(DTYPE_VIDEO, "{0}.f{1}.{2}".format(fname, info.quality, vfrag_ext))
+	vfile = os.path.join(DTYPE_VIDEO, "{0}.f{1}.ts".format(fname, info.quality))
 	thmbnl_file = os.path.join(DTYPE_VIDEO, "{0}.jpeg".format(fname))
 
 	progress_queue = queue.Queue()
@@ -1047,9 +1030,8 @@ def main():
 			pass
 		except KeyboardInterrupt:
 			# Attempt to shutdown gracefully by stopping the download threads
-			info.lock.acquire()
-			info.stopping = True
-			info.lock.release()
+			with info.lock:
+				info.stopping = True
 			print("\nKeyboard Interrupt, stopping download...")
 
 			for t in threads:
@@ -1099,7 +1081,7 @@ def main():
 		if thumbnail:
 			retcode = execute(["ffmpeg",
 				"-hide_banner",
-				"-loglevel", "error",
+				"-loglevel", "fatal",
 				"-i", afile,
 				"-i", thmbnl_file,
 				"-map", "0", "-map", "1",
@@ -1109,7 +1091,7 @@ def main():
 		else:
 			retcode = execute(["ffmpeg",
 				"-hide_banner",
-				"-loglevel", "error",
+				"-loglevel", "fatal",
 				"-i", afile,
 				"-c", "copy",
 				mfile])
@@ -1124,7 +1106,7 @@ def main():
 		if thumbnail:
 			retcode = execute(["ffmpeg",
 				"-hide_banner",
-				"-loglevel", "error",
+				"-loglevel", "fatal",
 				"-i", vfile,
 				"-i", thmbnl_file,
 				"-i", afile,
@@ -1135,7 +1117,7 @@ def main():
 		else:
 			retcode = execute(["ffmpeg",
 				"-hide_banner",
-				"-loglevel", "error",
+				"-loglevel", "fatal",
 				"-i", vfile,
 				"-i", afile,
 				"-c", "copy",
