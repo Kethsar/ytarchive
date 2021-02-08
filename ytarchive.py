@@ -92,7 +92,9 @@ class DownloadInfo:
 		self.format_info = FormatInfo()
 		self.stopping = False
 		self.in_progress = False
-		self.vp9 = False
+		self.is_live = False
+		self.try_vp9 = False
+		self.is_vp9 = False
 		self.thumbnail = ""
 		self.vid = ""
 		self.url = ""
@@ -101,6 +103,7 @@ class DownloadInfo:
 		self.quality = -1
 		self.retry_secs = 0
 		self.thread_count = 1
+		self.last_updated = 0
 		self.download_urls = {
 			DTYPE_VIDEO: "",
 			DTYPE_AUDIO: ""
@@ -363,6 +366,13 @@ def get_playable_player_response(info):
 
 	return {"player_response": player_response, "selected_qualities": selected_qualities}
 
+def is_fragmented(url):
+	# Per anon, there will be a noclen query parameter if the given URLs
+	# are meant to be downloaded in fragments. Else it will have a clen
+	# parameter obviously specifying content length.
+	queries = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+	return "noclen" in queries
+
 # Get necessary video info such as video/audio URLs
 # Stores them in info
 def get_video_info(info):
@@ -370,7 +380,13 @@ def get_video_info(info):
 
 	if info.stopping:
 		info.lock.release()
-		return
+		return False
+
+	# Almost nothing we care about is likely to change in 15 seconds,
+	# except maybe whether the livestream is online
+	update_delta = time.time() - info.last_updated
+	if update_delta < RECHECK_TIME:
+		return False
 
 	vals = get_playable_player_response(info)
 	if not vals:
@@ -390,12 +406,7 @@ def get_video_info(info):
 		if "endTimestamp" in live_details:
 			# Assume that all formats will be fully processed if one is, and vice versa
 			url = player_response["streamingData"]["adaptiveFormats"][0]["url"]
-			queries = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
-
-			# Per anon, there will be a noclen query parameter if the given URLs
-			# are meant to be downloaded in fragments. Else it will have a clen
-			# parameter obviously specifying content length.
-			if "noclen" not in queries:
+			if not is_fragmented(url):
 				print("Livestream has been processed, use youtube-dl instead.")
 				return False
 		else:
@@ -467,9 +478,11 @@ def get_video_info(info):
 							info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
 							found = True
 							print("Selected quality: {0} (H264)".format(q))
-						elif info.vp9 and fmt["itag"] == video_itag["vp9"]:
+						elif info.try_vp9 and fmt["itag"] == video_itag["vp9"]:
 							info.quality = fmt["itag"]
 							info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
+							info.is_vp9 = True
+
 							if not found:
 								print("Selected quality: {0} (VP9)".format(q))
 								found = True
@@ -495,6 +508,10 @@ def get_video_info(info):
 		aonly = info.quality == VIDEO_LABEL_ITAGS["audio_only"]
 
 		for fmt in formats:
+			# Don't bother with refreshing the URL if it's not the kind we can even use
+			if not is_fragmented(fmt["url"]):
+				continue
+
 			if not aonly and fmt["itag"] == info.quality:
 				info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
 			elif fmt["itag"] == AUDIO_ITAG:
@@ -509,6 +526,8 @@ def get_video_info(info):
 		info.thumbnail = pmfr["thumbnail"]["thumbnails"][0]["url"]
 		info.in_progress = True
 
+	info.is_live = is_live
+	info.last_updated = time.time()
 	info.lock.release()
 	return True
 
@@ -539,7 +558,16 @@ def download_frags(data_type, info, seq_queue, data_queue):
 			frag_tries += 1
 
 			if frag_tries >= FRAG_MAX_TRIES:
-				downloading = False
+				# For all instances where we might try to stop downloading,
+				# make sure the livestream is not still live.
+				# If it is, keep trying. Had all video download threads die
+				# somehow while a stream was still going. Hopefully this
+				# will fix that
+				get_video_info(info)
+				if not info.is_live:
+					downloading = False
+				else:
+					frag_tries = 0
 
 			continue
 
@@ -603,7 +631,12 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					time.sleep(2)
 
 			if tries >= FRAG_MAX_TRIES or empty_cnt >= FRAG_MAX_EMPTY:
-				downloading = False
+				get_video_info(info)
+				if not info.is_live:
+					downloading = False
+				else:
+					tries = 0
+					empty_cnt = 0
 
 # Download the given data_type stream to dfile
 # Sends progress info through progress_queue
@@ -845,6 +878,7 @@ def main():
 	cfile = ""
 	fname_format = "%(title)s-%(id)s"
 	thumbnail = False
+	vfrag_ext = "ts"
 
 	try:
 		opts, args = getopt.getopt(sys.argv[1:],
@@ -866,7 +900,7 @@ def main():
 		elif o in ("-t", "--thumbnail"):
 			thumbnail = True
 		elif o == "--vp9":
-			info.vp9 = True
+			info.try_vp9 = True
 		elif o in ("-c", "--cookies"):
 			cfile = a
 		elif o in ("-o", "--output"):
@@ -943,8 +977,17 @@ def main():
 	fdir = os.path.dirname(full_fpath)
 	fname = os.path.basename(full_fpath)
 	fname = sterilize_filename(fname)
+
+	if len(fname.strip()) == 0:
+		print("Output file name appears to be empty.")
+		print("Expanded output file path: {0}".format(full_fpath))
+		sys.exit(1)
+
+	if info.is_vp9:
+		vfrag_ext = "webm"
+
 	afile = os.path.join(DTYPE_AUDIO, "{0}.f{1}.ts".format(fname, AUDIO_ITAG))
-	vfile = os.path.join(DTYPE_VIDEO, "{0}.f{1}.ts".format(fname, info.quality))
+	vfile = os.path.join(DTYPE_VIDEO, "{0}.f{1}.{2}".format(fname, info.quality, vfrag_ext))
 	thmbnl_file = os.path.join(DTYPE_VIDEO, "{0}.jpeg".format(fname))
 
 	progress_queue = queue.Queue()
