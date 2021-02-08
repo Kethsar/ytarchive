@@ -1,4 +1,4 @@
-#!/bin/env python
+#!/bin/env python3
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -394,9 +394,9 @@ def get_video_info(info):
 			#format 2021-01-26T16:47:42+00:00
 			end_time = calendar.timegm(time.strptime(end_timestamp, "%Y-%m-%dT%H:%M:%S%z"))
 			elapsed = time.time() - end_time
-			if elapsed > 60:
-				print("Livestream has been offline for more than a minute.")
-				print("It's likely to be public still, try using youtube-dl")
+			if elapsed > 60*60*2: # two hours
+				print("Livestream has been offline for more than two hours.")
+				print("It's likely to stay public, try using youtube-dl.")
 				return False
 		else:
 			print("Livestream is offline, should have started, but has no end timestamp.")
