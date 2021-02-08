@@ -83,7 +83,7 @@ class Fragment:
 		self.seq = seq
 		self.data = data
 
-# Miscelaneous information
+# Miscellaneous information
 class DownloadInfo:
 	def __init__(self):
 		# Python may have the GIL but it's better to be safe
@@ -93,8 +93,7 @@ class DownloadInfo:
 		self.stopping = False
 		self.in_progress = False
 		self.is_live = False
-		self.try_vp9 = False
-		self.is_vp9 = False
+		self.vp9 = False
 		self.thumbnail = ""
 		self.vid = ""
 		self.url = ""
@@ -271,6 +270,8 @@ def get_playable_player_response(info):
 
 		if not 'videoDetails' in player_response:
 			print("Video Details not found, video is likely private or does not exist.")
+			if info.in_progress:
+				info.is_live = False
 			return None
 
 		if not player_response['videoDetails']['isLiveContent']:
@@ -285,6 +286,9 @@ def get_playable_player_response(info):
 
 		if playability_status == PLAYABLE_ERROR:
 			print("Playability status: ERROR. Reason: {0}".format(playability["reason"]))
+			if info.in_progress:
+				print("Finishing download")
+				info.is_live = False
 			return None
 
 		elif playability_status == PLAYABLE_UNPLAYABLE:
@@ -296,6 +300,10 @@ def get_playable_player_response(info):
 			return None
 
 		elif playability_status == PLAYABLE_OFFLINE:
+			# We've already started downloading, stream might be experiencing issues
+			if info.in_progress:
+				return None
+
 			if info.wait == NO_WAIT:
 				print("Stream appears to be a future scheduled stream, and you opted not to wait.")
 				return None
@@ -358,6 +366,8 @@ def get_playable_player_response(info):
 				print()
 				
 			print("Unknown playability status: {0}".format(playability_status))
+			if info.in_progress:
+				info.is_live = False
 			return None
 
 		if secs_late > 0:
@@ -475,11 +485,10 @@ def get_video_info(info):
 								info.quality = fmt["itag"]
 								info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
 								found = True
-								print("Selected quality: {0} (H264)".format(q))
-							elif info.try_vp9 and fmt["itag"] == video_itag["vp9"]:
+								print("Selected quality: {0} (h264)".format(q))
+							elif info.vp9 and fmt["itag"] == video_itag["vp9"]:
 								info.quality = fmt["itag"]
 								info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
-								info.is_vp9 = True
 
 								if not found:
 									print("Selected quality: {0} (VP9)".format(q))
@@ -637,7 +646,6 @@ def download_stream(data_type, dfile, progress_queue, info):
 	seq_queue = queue.Queue()
 	cur_frag = 0
 	cur_seq = 0
-	active_downloads = 0
 	tcount = info.thread_count
 	tries = 10
 	dthreads = []
@@ -649,6 +657,11 @@ def download_stream(data_type, dfile, progress_queue, info):
 		dthreads.append(t)
 		t.start()
 
+	# Initial start
+	while cur_seq < tcount:
+		seq_queue.put(cur_seq)
+		cur_seq += 1
+
 	while True:
 		downloading = False
 
@@ -659,12 +672,6 @@ def download_stream(data_type, dfile, progress_queue, info):
 
 		if not downloading:
 			break
-
-		# Try not to use too much memory by limiting the number of fragments to store in memory
-		while active_downloads < tcount:
-			seq_queue.put(cur_seq)
-			cur_seq += 1
-			active_downloads += 1
 
 		# Get all available data
 		while True:
@@ -693,7 +700,8 @@ def download_stream(data_type, dfile, progress_queue, info):
 				progress_queue.put(ProgressInfo(data_type, b))
 
 				data.remove(d)
-				active_downloads -= 1
+				seq_queue.put(cur_seq) 
+				cur_seq += 1
 				tries = 10
 				i = 0 # Start from the beginning since the next one might have finished downloading earlier
 			except Exception as err:
@@ -857,8 +865,8 @@ def print_help():
 	
 	print("\tid (string): Video identifier")
 	print("\ttitle (string): Video title")
-	print("\tchannel_id (string): Id of the channel")
-	print("\tchannel (string): Fulle name of the channel the livestream is on")
+	print("\tchannel_id (string): ID of the channel")
+	print("\tchannel (string): Full name of the channel the livestream is on")
 	print("\tupload_date (string): Technically stream date (YYYYMMDD)")
 
 def main():
@@ -890,7 +898,7 @@ def main():
 		elif o in ("-t", "--thumbnail"):
 			thumbnail = True
 		elif o == "--vp9":
-			info.try_vp9 = True
+			info.vp9 = True
 		elif o in ("-c", "--cookies"):
 			cfile = a
 		elif o in ("-o", "--output"):
