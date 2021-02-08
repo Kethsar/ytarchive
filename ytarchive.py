@@ -394,8 +394,13 @@ def get_video_info(info):
 			#format 2021-01-26T16:47:42+00:00
 			end_time = calendar.timegm(time.strptime(end_timestamp, "%Y-%m-%dT%H:%M:%S%z"))
 			elapsed = time.time() - end_time
-			if elapsed > 60*60*2: # two hours
-				print("Livestream has been offline for more than two hours.")
+
+			 # Check if two hours have passed, or the formats key has appeared
+			 # Formats key means the video has processed far enough to not
+			 # be downloadable with our usual method
+			 # TODO: Check for dashManifestUrl if formats has appeared. That should allow downloading still
+			if elapsed > 60*60*2 or "formats" in player_response["streamingData"]:
+				print("Livestream has been offline for more than two hours, or has been processed too far for us to download.")
 				print("It's likely to stay public, try using youtube-dl.")
 				return False
 		else:
@@ -536,6 +541,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 			info.lock.acquire()
 			if info.stopping:
 				info.lock.release()
+				downloading = False
 				break
 
 			info.lock.release()
