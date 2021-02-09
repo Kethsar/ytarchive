@@ -757,6 +757,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					empty_cnt = 0
 
 	logging.debug("{0}: exiting".format(tname))
+	info.print_status()
 
 # Download the given data_type stream to dfile
 # Sends progress info through progress_queue
@@ -877,6 +878,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 		f.close()
 
 	logging.debug("{0} download thread closing".format(data_type))
+	info.print_status()
 
 # Find the video ID from the given URL
 def get_video_id(url):
@@ -964,6 +966,10 @@ def print_help():
 	print("\t\tfor the given stream's user. Must be netscape cookie format.")
 	print()
 
+	print("\t--debug")
+	print("\t\tPrint a lot of extra information.")
+	print()
+
 	print("\t-n, --no-wait")
 	print("\t\tDo not wait for a livestream if it's a future scheduled stream.")
 	print()
@@ -998,7 +1004,7 @@ def print_help():
 	print()
 
 	print("\t-v, --verbose")
-	print("\t\tPrint extra information")
+	print("\t\tPrint extra information.")
 	print()
 
 	print("\t--vp9")
@@ -1101,6 +1107,7 @@ def main():
 		else:
 			assert False, "Unhandled option"
 
+	# Set up logging
 	loglevel = logging.WARNING
 	if debug:
 		loglevel = logging.DEBUG
