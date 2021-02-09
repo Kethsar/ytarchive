@@ -79,9 +79,10 @@ class ProgressInfo:
 
 # Fragment data
 class Fragment:
-	def __init__(self, seq, data):
+	def __init__(self, seq, data, header_seqnum):
 		self.seq = seq
 		self.data = data
+		self.x_head_seqnum
 
 # Miscellaneous information
 class DownloadInfo:
@@ -103,6 +104,7 @@ class DownloadInfo:
 		self.retry_secs = 0
 		self.thread_count = 1
 		self.last_updated = 0
+		self.target_duration = 5
 		self.download_urls = {
 			DTYPE_VIDEO: "",
 			DTYPE_AUDIO: ""
@@ -229,6 +231,10 @@ def get_quality_from_user(formats, waiting=False):
 
 	return selected_qualities
 
+def get_yes_no(msg):
+	yesno = input(msg)
+	return yesno.lower() == "y"
+
 # Ask if the user wants to wait for a scheduled stream to start and then record it
 def ask_wait_for_stream(url):
 	print("{0} is probably a future scheduled livestream.".format(url))
@@ -237,8 +243,7 @@ def ask_wait_for_stream(url):
 	print()
 	print("I can do this instead of you don't have streamlink.")
 
-	cont = input("Wait for the livestream and record it? [y/N]: ")
-	return cont.lower() == "y"
+	return get_yes_no("Wait for the livestream and record it? [y/N]: ")
 
 # Find the logged_in value from the given player_response object
 # Useful for checking if a cookies file is working properly
@@ -497,8 +502,10 @@ def get_video_info(info):
 									print("VP9 of the same quality found, using that instead")
 							elif fmt["itag"] == AUDIO_ITAG:
 								info.download_urls[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
+								info.target_duration = fmt["targetDurationSec"]
 						elif fmt["itag"] == AUDIO_ITAG:
 							info.download_urls[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
+							info.target_duration = fmt["targetDurationSec"]
 
 					if found:
 						break
@@ -567,7 +574,9 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				# If it is, keep trying. Had all video download threads die
 				# somehow while a stream was still going. Hopefully this
 				# will fix that
-				get_video_info(info)
+				if info.is_live:
+					get_video_info(info)
+
 				if not info.is_live:
 					downloading = False
 				else:
@@ -598,8 +607,10 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				bad_url = False
 
 			try:
-				with urllib.request.urlopen(url.format(frag), timeout=5) as resp:
+				header_seqnum = -1
+				with urllib.request.urlopen(url.format(frag), timeout=info.target_duration * 2) as resp:
 					buf = resp.read()
+					header_seqnum = resp.getheader("X-Head-Seqnum", -1)
 
 				if len(buf) == 0:
 					empty_cnt += 1
@@ -608,7 +619,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					
 					continue
 
-				data_queue.put(Fragment(frag, buf))
+				data_queue.put(Fragment(frag, buf, header_seqnum))
 				break
 			except urllib.error.HTTPError as err:
 				# 403 means our URLs have likely expired
@@ -623,7 +634,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				# Seems to happen on the last chunk that has data. Maybe.
 				tries += 1
 				if tries >= FRAG_MAX_TRIES and len(buf) > 0:
-					data_queue.put(Fragment(frag, buf))
+					data_queue.put(Fragment(frag, buf, header_seqnum))
 				else:
 					time.sleep(2)
 			except Exception as err:
@@ -632,7 +643,9 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					time.sleep(2)
 
 			if tries >= FRAG_MAX_TRIES or empty_cnt >= FRAG_MAX_EMPTY:
-				get_video_info(info)
+				if info.is_live:
+					get_video_info(info)
+
 				if not info.is_live:
 					downloading = False
 				else:
@@ -646,6 +659,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 	seq_queue = queue.Queue()
 	cur_frag = 0
 	cur_seq = 0
+	max_seqs = -1
 	tcount = info.thread_count
 	tries = 10
 	dthreads = []
@@ -697,11 +711,22 @@ def download_stream(data_type, dfile, progress_queue, info):
 			try:
 				b = f.write(d.data)
 				cur_frag += 1
-				progress_queue.put(ProgressInfo(data_type, b))
+				if d.x_head_seqnum > max_seqs:
+					max_seqs = d.x_head_seqnum
 
+				progress_queue.put(ProgressInfo(data_type, b))
 				data.remove(d)
-				seq_queue.put(cur_seq) 
-				cur_seq += 1
+
+				# If we know the current max sequence number, use that to
+				# determine if we try for another fragment. Else just try anyway
+				if max_seqs > 0:
+					if cur_seq <= max_seqs:
+						seq_queue.put(cur_seq) 
+						cur_seq += 1
+				else:
+					seq_queue.put(cur_seq) 
+					cur_seq += 1
+
 				tries = 10
 				i = 0 # Start from the beginning since the next one might have finished downloading earlier
 			except Exception as err:
@@ -1044,7 +1069,12 @@ def main():
 
 			for t in threads:
 				t.join()
-			sys.exit(2)
+
+			merge = get_yes_no("Download stopped prematurely. Would you like to merge the currently downloaded data? [y/N]: ")
+			if merge:
+				alive = False
+			else:
+				sys.exit(2)
 		
 		if not alive:
 			break
@@ -1082,54 +1112,37 @@ def main():
 			print("The final file will be placed in the current working directory")
 			fdir = ""
 
+	ffmpeg_args = [
+		"ffmpeg",
+		"-hide_banner",
+		"-loglevel", "fatal",
+		"-i", afile
+	]
+
+	if thumbnail:
+		ffmpeg_args.extend(["-i", thmbnl_file])
+
 	if aonly:
 		print("Correcting audio container")
 		mfile = os.path.join(fdir, "{0}.m4a".format(fname))
-
-		if thumbnail:
-			retcode = execute(["ffmpeg",
-				"-hide_banner",
-				"-loglevel", "fatal",
-				"-i", afile,
-				"-i", thmbnl_file,
-				"-map", "0", "-map", "1",
-				"-c", "copy",
-				"-disposition:v:0", "attached_pic",
-				mfile])
-		else:
-			retcode = execute(["ffmpeg",
-				"-hide_banner",
-				"-loglevel", "fatal",
-				"-i", afile,
-				"-c", "copy",
-				mfile])
 	else:
 		print("Muxing files")
 		mfile = os.path.join(fdir, "{0}.mp4".format(fname))
 
-		# The seemingly pointless -map args are required for adding the 
-		# thumbnail, at least for video. For audio only, it seemed to work
-		# without but I kept it up there as well
-		# Also this is only doable because we know the livestream is MP4
+		ffmpeg_args.extend(["-i", vfile])
 		if thumbnail:
-			retcode = execute(["ffmpeg",
-				"-hide_banner",
-				"-loglevel", "fatal",
-				"-i", vfile,
-				"-i", thmbnl_file,
-				"-i", afile,
-				"-map", "0", "-map", "1", "-map", "2",
-				"-c", "copy",
-				"-disposition:v:1", "attached_pic",
-				mfile])
-		else:
-			retcode = execute(["ffmpeg",
-				"-hide_banner",
-				"-loglevel", "fatal",
-				"-i", vfile,
-				"-i", afile,
-				"-c", "copy",
-				mfile])
+			ffmpeg_args.extend([
+				"-map", "0",
+				"-map", "1",
+				"-map", "2"
+			])
+		
+	ffmpeg_args.extend(["-c", "copy"])
+	if thumbnail:
+		ffmpeg_args.extend(["-disposition:v:0", "attached_pic"])
+	
+	ffmpeg_args.append(mfile)
+	retcode = execute(ffmpeg_args)
 
 	if retcode != 0:
 		print("execute returned code {0}. Something must have gone wrong with ffmpeg.".format(retcode))
