@@ -126,6 +126,7 @@ class DownloadInfo:
 		self.vid = ""
 		self.url = ""
 		self.selected_quality = ""
+		self.status = ""
 		self.wait = WAIT_ASK
 		self.quality = -1
 		self.retry_secs = 0
@@ -140,6 +141,16 @@ class DownloadInfo:
 			DTYPE_VIDEO: 0,
 			DTYPE_AUDIO: 0
 		}
+
+	def set_status(self, status):
+		with self.lock:
+			self.status = status
+
+	# For use after logging statements, since they wipe out the current status
+	# with how I have things set up
+	def print_status(self):
+		with self.lock:
+			print(self.status, end="")
 
 # Remove any illegal filename chars
 # Not robust, but the combination of video title and id should prevent other illegal combinations
@@ -305,9 +316,14 @@ def get_playable_player_response(info):
 
 
 		if not 'videoDetails' in player_response:
-			print("Video Details not found, video is likely private or does not exist.")
 			if info.in_progress:
+				logging.warning("Video details no longer available mid download.")
+				logging.warning("Stream was likely privated after finishing.")
+				logging.warning("A way around this has not yet been implemented")
+				info.print_status()
 				info.is_live = False
+			else:
+				print("Video Details not found, video is likely private or does not exist.")
 			return None
 
 		if not player_response['videoDetails']['isLiveContent']:
@@ -425,6 +441,8 @@ def is_fragmented(url):
 
 # Get necessary video info such as video/audio URLs
 # Stores them in info
+# TODO: Store the fash manifest URL for potential use if a stream is 
+# privated before we finish downloading
 def get_video_info(info):
 	with info.lock: # Because I forgot some releases, this is worth the extra indent
 		if info.stopping:
@@ -625,6 +643,8 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					if info.active_threads[data_type] > 1:
 						logging.debug("{0}: Starved for fragment numbers and multiple fragment threads running".format(tname))
 						logging.debug("{0}: Closing this thread to minimize unneeded network requests".format(tname))
+						info.print_status()
+
 						downloading = False
 						info.active_threads[data_type] -= 1
 						continue
@@ -637,6 +657,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				else:
 					logging.debug("{0}: Could not get a new fragment to download after {1} tries and we are the only active downloader".format(tname, FRAG_MAX_TRIES))
 					logging.debug("{0}: That is an issue, hopefully it will correct itself".format(tname))
+					info.print_status()
 					frag_tries = 0
 
 			continue
@@ -653,6 +674,8 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				# Check if a new URL is already waiting for us
 				# Else refresh auth by calling get_video_info again
 				logging.debug("{0}: Attempting to retrieve a new download URL".format(tname))
+				info.print_status()
+
 				with info.lock:
 					new_url = info.download_urls[data_type]
 
@@ -666,6 +689,8 @@ def download_frags(data_type, info, seq_queue, data_queue):
 			try:
 				header_seqnum = -1
 				with urllib.request.urlopen(url.format(frag), timeout=info.target_duration * 2) as resp:
+					# TODO: Maybe read in chunks of 4096 bytes instead of all at once
+					# May or may not matter
 					buf = resp.read()
 					header_seqnum = int(resp.getheader("X-Head-Seqnum", -1))
 
@@ -680,6 +705,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				break
 			except urllib.error.HTTPError as err:
 				logging.debug("{0}: HTTP Error for fragment {1}: {2}".format(tname, frag, err))
+				info.print_status()
 
 				# 403 means our URLs have likely expired
 				# Happens every 21540 seconds, or 359 minutes.
@@ -692,6 +718,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 			except http.client.IncompleteRead as err:
 				# Seems to happen on the last chunk that has data. Maybe.
 				logging.debug("{0}: Incomplete read on fragment {1}: {2}".format(tname, frag, err))
+				info.print_status()
 
 				tries += 1
 				if tries >= FRAG_MAX_TRIES and len(buf) > 0:
@@ -701,6 +728,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					time.sleep(1)
 			except Exception as err:
 				logging.debug("{0}: Error with fragment {1}: {2}".format(tname, frag, err))
+				info.print_status()
 
 				tries += 1
 				if tries < FRAG_MAX_TRIES:
@@ -715,6 +743,8 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					empty_cnt,
 					FRAG_MAX_EMPTY
 				))
+				info.print_status()
+
 				if info.is_live:
 					get_video_info(info)
 
@@ -722,10 +752,11 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					downloading = False
 				else:
 					logging.debug("{0}: Fragment {1}: Stream still live, continuing to download attempt".format(tname, frag))
+					info.print_status()
 					tries = 0
 					empty_cnt = 0
 
-	logging.debug("{0} exiting".format(tname))
+	logging.debug("{0}: exiting".format(tname))
 
 # Download the given data_type stream to dfile
 # Sends progress info through progress_queue
@@ -780,6 +811,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 		if len(data) == 0:
 			if active_downloads <= 0:
 				logging.debug("Somehow no active downloads and no data to write")
+				info.print_status()
 
 				while active_downloads < info.active_threads[data_type]:
 					seq_queue.put(cur_seq)
@@ -825,12 +857,15 @@ def download_stream(data_type, dfile, progress_queue, info):
 			except Exception as err:
 				tries -= 1
 				logging.info("Error when attempting to write fragment {0} to {1}: {2}".format(cur_frag, dfile, err))
+				info.print_status()
 
 				if tries > 0:
 					logging.info("Will try {0} more time(s)".format(tries))
+					info.print_status()
 
 		if tries <= 0:
 			logging.warning("Stopping download, something must be wrong...")
+			info.print_status()
 
 			with info.lock:
 				info.stopping = True
@@ -1072,7 +1107,7 @@ def main():
 	elif verbose:
 		loglevel = logging.INFO
 
-	logging.basicConfig(format="\r%(asctime)s %(levelname)s:%(message)s{0}{1}".format(" "*25, "\b"*25), datefmt="%H:%M:%S", level=loglevel)
+	logging.basicConfig(format="\r%(asctime)s %(levelname)s: %(message)s{0}{1}".format(" "*80, "\b"*80), datefmt="%H:%M:%S", level=loglevel)
 
 	if len(args) > 1:
 		info.url = args[0]
@@ -1197,6 +1232,8 @@ def main():
 				status += "Max sequence: {0}; ".format(max_seqs)
 			
 			status += "Total Downloaded: {0}{1}{2}".format(format_size(total_bytes), " "*5, "\b"*5)
+			info.set_status(status)
+
 			print(status, end="")
 		except queue.Empty:
 			pass
