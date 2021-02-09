@@ -130,7 +130,7 @@ class DownloadInfo:
 		self.wait = WAIT_ASK
 		self.quality = -1
 		self.retry_secs = 0
-		self.thread_count = 1 # Make into dict 
+		self.thread_count = 1
 		self.last_updated = 0
 		self.target_duration = 5
 		self.download_urls = {
@@ -811,7 +811,8 @@ def download_stream(data_type, dfile, progress_queue, info):
 		# Wait for 100ms if no data is available
 		if len(data) == 0:
 			if active_downloads <= 0:
-				logging.debug("Somehow no active downloads and no data to write")
+				logging.debug("{0}-download: Somehow no active downloads and no data to write".format(data_type))
+				logging.debug("{0}-download: Fragment this happened at: {1}".format(data_type, cur_frag))
 				info.print_status()
 
 				while active_downloads < info.active_threads[data_type]:
@@ -857,15 +858,15 @@ def download_stream(data_type, dfile, progress_queue, info):
 				i = 0 # Start from the beginning since the next one might have finished downloading earlier
 			except Exception as err:
 				tries -= 1
-				logging.info("Error when attempting to write fragment {0} to {1}: {2}".format(cur_frag, dfile, err))
+				logging.info("{0}-download: Error when attempting to write fragment {1} to {2}: {3}".format(data_type, cur_frag, dfile, err))
 				info.print_status()
 
 				if tries > 0:
-					logging.info("Will try {0} more time(s)".format(tries))
+					logging.info("{0}-download: Will try {1} more time(s)".format(data_type, tries))
 					info.print_status()
 
 		if tries <= 0:
-			logging.warning("Stopping download, something must be wrong...")
+			logging.warning("{0}-download: Stopping download, something must be wrong...".format(data_type))
 			info.print_status()
 
 			with info.lock:
@@ -877,7 +878,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 	if not f.closed:
 		f.close()
 
-	logging.debug("{0} download thread closing".format(data_type))
+	logging.debug("{0}-download thread closing".format(data_type))
 	info.print_status()
 
 # Find the video ID from the given URL
