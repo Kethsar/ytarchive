@@ -441,7 +441,7 @@ def is_fragmented(url):
 
 # Get necessary video info such as video/audio URLs
 # Stores them in info
-# TODO: Store the fash manifest URL for potential use if a stream is 
+# TODO: Store the dash manifest URL for potential use if a stream is 
 # privated before we finish downloading
 def get_video_info(info):
 	with info.lock: # Because I forgot some releases, this is worth the extra indent
@@ -858,11 +858,11 @@ def download_stream(data_type, dfile, progress_queue, info):
 				i = 0 # Start from the beginning since the next one might have finished downloading earlier
 			except Exception as err:
 				tries -= 1
-				logging.info("{0}-download: Error when attempting to write fragment {1} to {2}: {3}".format(data_type, cur_frag, dfile, err))
+				logging.warning("{0}-download: Error when attempting to write fragment {1} to {2}: {3}".format(data_type, cur_frag, dfile, err))
 				info.print_status()
 
 				if tries > 0:
-					logging.info("{0}-download: Will try {1} more time(s)".format(data_type, tries))
+					logging.warning("{0}-download: Will try {1} more time(s)".format(data_type, tries))
 					info.print_status()
 
 		if tries <= 0:
@@ -1292,8 +1292,8 @@ def main():
 		try:
 			os.makedirs(fdir, exist_ok=True)
 		except Exception as err:
-			print("Error creating final file directory: {0}".format(err))
-			print("The final file will be placed in the current working directory")
+			logging.warning("Error creating final file directory: {0}".format(err))
+			logging.warning("The final file will be placed in the current working directory")
 			fdir = ""
 
 	ffmpeg_args = [
