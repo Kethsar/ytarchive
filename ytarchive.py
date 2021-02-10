@@ -118,21 +118,27 @@ class DownloadInfo:
 		self.lock = threading.RLock()
 		self.format_info = FormatInfo()
 		self.metadata = MetaInfo()
+
 		self.stopping = False
 		self.in_progress = False
 		self.is_live = False
 		self.vp9 = False
+
 		self.thumbnail = ""
 		self.vid = ""
 		self.url = ""
 		self.selected_quality = ""
 		self.status = ""
+		self.dash_manifest_url = ""
+
 		self.wait = WAIT_ASK
 		self.quality = -1
 		self.retry_secs = 0
 		self.thread_count = 1
 		self.last_updated = 0
 		self.target_duration = 5
+		self.expires_in_seconds = 21540 # Usual 5h 59m expiration
+
 		self.download_urls = {
 			DTYPE_VIDEO: "",
 			DTYPE_AUDIO: ""
@@ -287,18 +293,6 @@ def ask_wait_for_stream(url):
 
 	return get_yes_no("Wait for the livestream and record it? [y/N]: ")
 
-# Find the logged_in value from the given player_response object
-# Useful for checking if a cookies file is working properly
-def get_logged_in(player_response):
-	serv_track_params = player_response["responseContext"]["serviceTrackingParams"]
-
-	for stp in serv_track_params:
-		params = stp["params"]
-
-		for p in params:
-			if p["key"] == "logged_in":
-				return p["value"]
-
 # Keep retrieving the player response object until the playability status is OK
 def get_playable_player_response(info):
 	first_wait = True
@@ -344,10 +338,12 @@ def get_playable_player_response(info):
 			return None
 
 		elif playability_status == PLAYABLE_UNPLAYABLE:
+			logged_in = not player_response["responseContext"]["mainAppWebResponseContext"]["loggedOut"]
+
 			print("Playability status: Unplayable.")
 			print("Reason: {0}".format(playability["reason"]))
-			print("Logged in status: {0}".format(get_logged_in(player_response)))
-			print("If this is a members only stream, you provided a cookies.txt file, and the above 'logged in' status is not '1', please try updating your cookies file.")
+			print("Logged in status: {0}".format(logged_in))
+			print("If this is a members only stream, you provided a cookies.txt file, and the above 'logged in' status is not True, please try updating your cookies file.")
 			print("Also check if your cookies file includes '#HttpOnly_' in front of some lines. If it does, delete that part of those lines and try again.")
 			return None
 
@@ -461,6 +457,7 @@ def get_video_info(info):
 		player_response = vals["player_response"]
 		selected_qualities = vals["selected_qualities"]
 		video_details = player_response["videoDetails"]
+		streaming_data = player_response["streamingData"]
 		pmfr = player_response["microformat"]["playerMicroformatRenderer"]
 		live_details = pmfr["liveBroadcastDetails"]
 		is_live = live_details["isLiveNow"]
@@ -471,11 +468,11 @@ def get_video_info(info):
 			# If not then download it. Else youtube-dl is a better choice.
 			if "endTimestamp" in live_details:
 				# Assume that all formats will be fully processed if one is, and vice versa
-				if not "url" in player_response["streamingData"]["adaptiveFormats"][0]:
+				if not "url" in streaming_data["adaptiveFormats"][0]:
 					print("Livestream has ended and is being processed. Download URLs are not available.")
 					return False
 
-				url = player_response["streamingData"]["adaptiveFormats"][0]["url"]
+				url = streaming_data["adaptiveFormats"][0]["url"]
 				if not is_fragmented(url):
 					print("Livestream has been processed, use youtube-dl instead.")
 					return False
@@ -484,7 +481,7 @@ def get_video_info(info):
 				print("You could try again, or try youtube-dl.")
 				return False
 		
-		formats = player_response["streamingData"]["adaptiveFormats"]
+		formats = streaming_data["adaptiveFormats"]
 
 		if info.quality < 0:
 			qualities = ["audio_only"]
@@ -598,6 +595,8 @@ def get_video_info(info):
 			info.thumbnail = pmfr["thumbnail"]["thumbnails"][0]["url"]
 			info.in_progress = True
 
+		info.expires_in_seconds = int(streaming_data["expiresInSeconds"])
+		info.dash_manifest_url = streaming_data["dashManifestUrl"]
 		info.is_live = is_live
 		info.last_updated = time.time()
 
