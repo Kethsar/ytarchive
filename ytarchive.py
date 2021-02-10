@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import getopt
 import logging
+import xml.etree.ElementTree as ET
 
 # Constants
 INFO_URL = "https://www.youtube.com/get_video_info?video_id={0}&el=detailpage"
@@ -123,6 +124,7 @@ class DownloadInfo:
 		self.in_progress = False
 		self.is_live = False
 		self.vp9 = False
+		self.is_unavailable = False
 
 		self.thumbnail = ""
 		self.vid = ""
@@ -280,8 +282,8 @@ def get_quality_from_user(formats, waiting=False):
 	return selected_qualities
 
 def get_yes_no(msg):
-	yesno = input(msg)
-	return yesno.lower() == "y"
+	yesno = input("{0} [y/N]: ".format(msg)).strip()
+	return yesno.lower().startswith("y")
 
 # Ask if the user wants to wait for a scheduled stream to start and then record it
 def ask_wait_for_stream(url):
@@ -291,7 +293,7 @@ def ask_wait_for_stream(url):
 	print()
 	print("I can do this instead of you don't have streamlink.")
 
-	return get_yes_no("Wait for the livestream and record it? [y/N]: ")
+	return get_yes_no("Wait for the livestream and record it?")
 
 # Keep retrieving the player response object until the playability status is OK
 def get_playable_player_response(info):
@@ -316,6 +318,7 @@ def get_playable_player_response(info):
 				logging.warning("A way around this has not yet been implemented")
 				info.print_status()
 				info.is_live = False
+				info.is_unavailable = True
 			else:
 				print("Video Details not found, video is likely private or does not exist.")
 			return None
@@ -420,10 +423,12 @@ def get_playable_player_response(info):
 			logging.warning("Unknown playability status: {0}".format(playability_status))
 			if info.in_progress:
 				info.is_live = False
+
 			return None
 
 		if secs_late > 0:
 			print()
+
 		retry = False
 
 	return {"player_response": player_response, "selected_qualities": selected_qualities}
@@ -434,6 +439,44 @@ def is_fragmented(url):
 	# parameter obviously specifying content length.
 	queries = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
 	return "noclen" in queries
+
+# Parse the DASH manifest XML and get the download URLs from it
+def get_urls_from_manifest(manifest):
+	urls = {}
+
+	try:
+		root = ET.fromstring(manifest)
+		reps = root.findall(".//{*}Representation")
+
+		for r in reps:
+			itag = r.get("id")
+			url = r.find("{*}BaseURL").text + "sq/{0}"
+
+			if itag and url:
+				urls[int(itag)] = url
+	except Exception as err:
+		logging.warning("Error parsing DASH manifest: {0}".format(err))
+
+	return urls
+
+# Get download URLs either from the DASH manifest or from the adaptiveFormats
+# Prioritize DASH manifest if it is available
+def get_download_urls(info, formats):
+	urls = {}
+
+	if info.dash_manifest_url:
+		manifest = download_as_text(info.dash_manifest_url)
+
+		if manifest:
+			urls = get_urls_from_manifest(manifest)
+			
+			if urls:
+				return urls
+	
+	for fmt in formats:
+		urls[fmt["itag"]] = fmt["url"] + "&sq={0}"
+
+	return urls
 
 # Get necessary video info such as video/audio URLs
 # Stores them in info
@@ -481,7 +524,12 @@ def get_video_info(info):
 				print("You could try again, or try youtube-dl.")
 				return False
 		
+		if "dashManifestUrl" in streaming_data: # Should be but maybe it isn't sometimes
+			info.dash_manifest_url = streaming_data["dashManifestUrl"]
+
 		formats = streaming_data["adaptiveFormats"]
+		info.target_duration = formats[0]["targetDurationSec"]
+		dl_urls = get_download_urls(info, formats)
 
 		if info.quality < 0:
 			qualities = ["audio_only"]
@@ -512,66 +560,41 @@ def get_video_info(info):
 				for q in selected_qualities:
 					q = q.strip()
 
-					# Find the best quality of those availble.
+					# Get the best quality of those availble.
 					# This is why we sorted the list as we made it.
 					if q == "best":
-						itags = list(VIDEO_LABEL_ITAGS.keys())
-						best = 0
-
-						for fmt in formats:
-							if 'qualityLabel' not in fmt:
-								continue
-
-							qlabel = fmt["qualityLabel"].lower()
-							priority = itags.index(qlabel)
-
-							if priority > best:
-								best = priority
-
-						q = itags[best]
+						q = qualities[len(qualities) - 1]
 
 					video_itag = VIDEO_LABEL_ITAGS[q]
 					aonly = video_itag == VIDEO_LABEL_ITAGS["audio_only"]
+					info.download_urls[DTYPE_AUDIO] = dl_urls[AUDIO_ITAG]
 
 					if aonly:
 						info.quality = video_itag
 						info.download_urls[DTYPE_VIDEO] = ""
+						break
+
+					if info.vp9 and video_itag["vp9"] in dl_urls:
+						info.download_urls[DTYPE_VIDEO] = dl_urls[video_itag["vp9"]]
+						info.quality = video_itag["vp9"]
 						found = True
-
-					for fmt in formats:
-						if not aonly:
-							if fmt["itag"] == video_itag["h264"] and not found:
-								info.quality = fmt["itag"]
-								info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
-								found = True
-								print("Selected quality: {0} (h264)".format(q))
-							elif info.vp9 and fmt["itag"] == video_itag["vp9"]:
-								info.quality = fmt["itag"]
-								info.download_urls[DTYPE_VIDEO] = fmt["url"] + "&sq={0}"
-
-								if not found:
-									print("Selected quality: {0} (VP9)".format(q))
-									found = True
-								else:
-									print("VP9 of the same quality found, using that instead")
-							elif fmt["itag"] == AUDIO_ITAG:
-								info.download_urls[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
-								info.target_duration = fmt["targetDurationSec"]
-						elif fmt["itag"] == AUDIO_ITAG:
-							info.download_urls[DTYPE_AUDIO] = fmt["url"] + "&sq={0}"
-							info.target_duration = fmt["targetDurationSec"]
-
-					if found:
+						print("Selected quality: {0} (VP9)".format(q))
+						break
+					elif video_itag["h264"] in dl_urls:
+						info.download_urls[DTYPE_VIDEO] = dl_urls[video_itag["h264"]]
+						info.quality = video_itag["h264"]
+						found = True
+						print("Selected quality: {0} (h264)".format(q))
 						break
 			
-			# None of the qualities the user gave were available
-			# Should only be possible if they chose to wait for a stream
-			# and chose only qualities that the streamer ended up not using
-			# i.e. 1080p60/720p60 when the stream is only available in 30 FPS
-			if not found:
-				print("\nThe qualities you selected ended up unavailble for this stream")
-				print("You will now have the option to select from the available qualities")
-				selected_qualities.clear()
+				# None of the qualities the user gave were available
+				# Should only be possible if they chose to wait for a stream
+				# and chose only qualities that the streamer ended up not using
+				# i.e. 1080p60/720p60 when the stream is only available in 30 FPS
+				if not found:
+					print("\nThe qualities you selected ended up unavailble for this stream")
+					print("You will now have the option to select from the available qualities")
+					selected_qualities.clear()
 		else:
 			aonly = info.quality == VIDEO_LABEL_ITAGS["audio_only"]
 
@@ -596,7 +619,6 @@ def get_video_info(info):
 			info.in_progress = True
 
 		info.expires_in_seconds = int(streaming_data["expiresInSeconds"])
-		info.dash_manifest_url = streaming_data["dashManifestUrl"]
 		info.is_live = is_live
 		info.last_updated = time.time()
 
@@ -669,22 +691,6 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 			buf = b''
 
-			if bad_url:
-				# Check if a new URL is already waiting for us
-				# Else refresh auth by calling get_video_info again
-				logging.debug("{0}: Attempting to retrieve a new download URL".format(tname))
-				info.print_status()
-
-				with info.lock:
-					new_url = info.download_urls[data_type]
-
-					if new_url != url:
-						url = new_url
-					elif get_video_info(info):
-						url = info.download_urls[data_type]
-
-				bad_url = False
-
 			try:
 				header_seqnum = -1
 				with urllib.request.urlopen(url.format(frag), timeout=info.target_duration * 2) as resp:
@@ -707,9 +713,19 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				info.print_status()
 
 				# 403 means our URLs have likely expired
-				# Happens every 21540 seconds, or 359 minutes.
 				if err.code == 403:
-					bad_url = True
+					# Check if a new URL is already waiting for us
+					# Else refresh auth by calling get_video_info again
+					logging.debug("{0}: Attempting to retrieve a new download URL".format(tname))
+					info.print_status()
+
+					with info.lock:
+						new_url = info.download_urls[data_type]
+
+						if new_url != url:
+							url = new_url
+						elif get_video_info(info):
+							url = info.download_urls[data_type]
 				
 				tries += 1
 				if tries < FRAG_MAX_TRIES:
@@ -1253,7 +1269,8 @@ def main():
 			for t in threads:
 				t.join()
 
-			merge = get_yes_no("Download stopped prematurely. Would you like to merge the currently downloaded data? [y/N]: ")
+			print()
+			merge = get_yes_no("Download stopped prematurely. Would you like to merge the currently downloaded data?")
 			if merge:
 				alive = False
 			else:
