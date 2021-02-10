@@ -92,7 +92,7 @@ class MetaInfo:
 		"title": "",
 		"artist": "",
 		"date": "",
-		"description": ""
+		"comment": ""
 	}
 
 	def get_meta(self):
@@ -108,7 +108,7 @@ class MetaInfo:
 		self.meta["date"] = pmfr["uploadDate"].replace("-", "")
 		# MP4 doesn't allow for a url metadata field
 		# Just put it at the top of the description
-		self.meta["description"] = "{0}\n\n{1}".format(url, vid_details["shortDescription"])
+		self.meta["comment"] = "{0}\n\n{1}".format(url, vid_details["shortDescription"])
 
 # Miscellaneous information
 class DownloadInfo:
