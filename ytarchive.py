@@ -662,9 +662,10 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 		tries = 0
 		empty_cnt = 0
-		bad_url = False
+		full_retries = 3
 		seq = -1
 		max_seq = -1
+		is_403 = False
 
 		try:
 			seq, max_seq = seq_queue.get(timeout=info.target_duration)
@@ -738,6 +739,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					continue
 
 				data_queue.put(Fragment(seq, buf, header_seqnum))
+				is_403 = False
 				break
 			except urllib.error.HTTPError as err:
 				logdebug("{0}: HTTP Error for fragment {1}: {2}".format(tname, seq, err))
@@ -749,6 +751,8 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					# Else refresh auth by calling get_video_info again
 					logdebug("{0}: Attempting to retrieve a new download URL".format(tname))
 					info.print_status()
+
+					is_403 = True
 
 					with info.lock:
 						new_url = info.download_urls[data_type]
@@ -784,11 +788,21 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				logdebug("{0}: Error with fragment {1}: {2}".format(tname, seq, err))
 				info.print_status()
 
+				if max_seq > -1:
+					with info.lock:
+						if not info.is_live and seq >= (max_seq - 2):
+							logdebug("{0}: Stream has ended and fragment within the last two not found, probably not actually created".format(tname))
+							info.print_status()
+							downloading = False
+							break
+
 				tries += 1
 				if tries < FRAG_MAX_TRIES:
 					time.sleep(2)
 
 			if tries >= FRAG_MAX_TRIES or empty_cnt >= FRAG_MAX_EMPTY:
+				full_retries -= 1
+
 				logdebug("{0}: Fragment {1}: {2}/{3} retries; {4}/{5} empty responses".format(
 					tname,
 					seq,
@@ -799,16 +813,26 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				))
 				info.print_status()
 
-				if info.is_live:
-					get_video_info(info)
+				with info.lock:
+					if info.is_live:
+						get_video_info(info)
 
-				if not info.is_live:
-					downloading = False
-				else:
-					logdebug("{0}: Fragment {1}: Stream still live, continuing download attempt".format(tname, seq))
-					info.print_status()
-					tries = 0
-					empty_cnt = 0
+					if not info.is_live:
+						if info.is_unavailable and is_403:
+							logwarn("{0}: Download link likely expired and stream is privated, cannot coninue download".format(tname))
+							info.print_status()
+							downloading = False
+						elif max_seq > -1 and seq < (max_seq - 2) and full_retries > 0:
+							logdebug("{0}: More than two fragments away from the highest known fragment".format(tname))
+							logdebug("{0}: Will try grabbing the fragment {1} more times".format(tname, full_retries))
+							info.print_status()
+						else:
+							downloading = False
+					else:
+						logdebug("{0}: Fragment {1}: Stream still live, continuing download attempt".format(tname, seq))
+						info.print_status()
+						tries = 0
+						empty_cnt = 0
 
 	logdebug("{0}: exiting".format(tname))
 	info.print_status()
