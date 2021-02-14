@@ -17,8 +17,42 @@ import getopt
 import logging
 import xml.etree.ElementTree as ET
 
+'''
+	TODO:
+		Use heartbeat API to continually check if the stream is online still
+		hb_apikey = parsedinfo['innertube_api_key'][0]
+		hbdataobj = {
+			"videoId": vid,
+			"heartbeatRequestParams": {
+				"heartbeatChecks": [
+					"HEARTBEAT_CHECK_TYPE_LIVE_STREAM_STATUS"
+				]
+			},
+			"context": {
+				"client": {
+					"clientName": "WEB",
+					"clientVersion": "" # Grab from ECATCHER service
+				}
+			}
+		}
+
+
+		{
+			"service": "ECATCHER",
+			"params": [
+				{
+					"key": "client.version",
+					"value": "2.20210209"
+				}
+			]
+		}
+
+		Ask to wait or poll if neither --wait or --retry-stream are given
+'''
+
 # Constants
 INFO_URL = "https://www.youtube.com/get_video_info?video_id={0}&el=detailpage"
+HEARTBEAT_URL = "https://www.youtube.com/youtubei/v1/player/heartbeat?alt=json&key={0}"
 HTML_VIDEO_LINK_TAG = '<link rel="canonical" href="https://www.youtube.com/watch?v='
 PLAYABLE_OK = "OK"
 PLAYABLE_OFFLINE = "LIVE_STREAM_OFFLINE"
@@ -35,6 +69,7 @@ NO_WAIT = 2
 FRAG_MAX_TRIES = 10
 FRAG_MAX_EMPTY = 10
 HOUR = 60 * 60
+BUF_SIZE = 8192
 
 # https://gist.github.com/AgentOak/34d47c65b1d28829bb17c24c04a0096f
 AUDIO_ITAG = 140
@@ -83,9 +118,9 @@ class ProgressInfo:
 
 # Fragment data
 class Fragment:
-	def __init__(self, seq, data, header_seqnum):
+	def __init__(self, seq, fname, header_seqnum):
 		self.seq = seq
-		self.data = data
+		self.fname = fname
 		self.x_head_seqnum = header_seqnum
 
 # Metadata for the final file
@@ -111,6 +146,13 @@ class MetaInfo:
 		# MP4 doesn't allow for a url metadata field
 		# Just put it at the top of the description
 		self.meta["comment"] = "{0}\n\n{1}".format(url, vid_details["shortDescription"])
+
+class MediaDLInfo:
+	def __init__(self):
+		self.active_threads = 0
+		self.download_url = ""
+		self.base_fpath = ""
+		self.data_type = ""
 
 # Miscellaneous information
 class DownloadInfo:
@@ -142,13 +184,9 @@ class DownloadInfo:
 		self.target_duration = 5
 		self.expires_in_seconds = 21540 # Usual 5h 59m expiration
 
-		self.download_urls = {
-			DTYPE_VIDEO: "",
-			DTYPE_AUDIO: ""
-		}
-		self.active_threads = {
-			DTYPE_VIDEO: 0,
-			DTYPE_AUDIO: 0
+		self.mdl_info = {
+			DTYPE_VIDEO: MediaDLInfo(),
+			DTYPE_AUDIO: MediaDLInfo()
 		}
 
 	def set_status(self, status):
@@ -272,12 +310,11 @@ def make_quality_list(formats):
 def parse_quality_list(formats, quality):
 	selected_qualities = []
 	quality = quality.lower().strip()
-	if "best" not in formats:
-		formats.append("best")
 
 	selected_quarities = quality.split('/')
 	for q in selected_quarities:
-		if q.strip() in formats:
+		stripped = q.strip()
+		if stripped in formats or stripped == "best":
 			selected_qualities.append(q)
 		
 	if len(selected_qualities) < 1:
@@ -595,21 +632,21 @@ def get_video_info(info):
 
 					video_itag = VIDEO_LABEL_ITAGS[q]
 					aonly = video_itag == VIDEO_LABEL_ITAGS["audio_only"]
-					info.download_urls[DTYPE_AUDIO] = dl_urls[AUDIO_ITAG]
+					info.mdl_info[DTYPE_AUDIO].download_url = dl_urls[AUDIO_ITAG]
 
 					if aonly:
 						info.quality = video_itag
-						info.download_urls[DTYPE_VIDEO] = ""
+						info.mdl_info[DTYPE_VIDEO].download_url = ""
 						break
 
 					if info.vp9 and video_itag["vp9"] in dl_urls:
-						info.download_urls[DTYPE_VIDEO] = dl_urls[video_itag["vp9"]]
+						info.mdl_info[DTYPE_VIDEO].download_url = dl_urls[video_itag["vp9"]]
 						info.quality = video_itag["vp9"]
 						found = True
 						print("Selected quality: {0} (VP9)".format(q))
 						break
 					elif video_itag["h264"] in dl_urls:
-						info.download_urls[DTYPE_VIDEO] = dl_urls[video_itag["h264"]]
+						info.mdl_info[DTYPE_VIDEO].download_url = dl_urls[video_itag["h264"]]
 						info.quality = video_itag["h264"]
 						found = True
 						print("Selected quality: {0} (h264)".format(q))
@@ -628,11 +665,11 @@ def get_video_info(info):
 
 			# Don't bother with refreshing the URL if it's not the kind we can even use
 			if AUDIO_ITAG in dl_urls and is_fragmented(dl_urls[AUDIO_ITAG]):
-				info.download_urls[DTYPE_AUDIO] = dl_urls[AUDIO_ITAG]
+				info.mdl_info[DTYPE_AUDIO].download_url = dl_urls[AUDIO_ITAG]
 
 			if not aonly:
 				if info.quality in dl_urls and is_fragmented(dl_urls[info.quality]):
-					info.download_urls[DTYPE_VIDEO] = dl_urls[info.quality]
+					info.mdl_info[DTYPE_VIDEO].download_url = dl_urls[info.quality]
 
 		# Grab some extra info on the first run through this function
 		if not info.in_progress:
@@ -647,11 +684,45 @@ def get_video_info(info):
 
 	return True
 
+# Get the name of top-level atoms along with their offset and length
+# In our case, data should be the first 5kb - 8kb of a fragment
+def get_atoms(data):
+	atoms = {}
+	ofs = 0
+
+	while True:
+		# We should be fine and not run into errors, but I do dumb things
+		try:
+			alen = int(data[ofs:ofs+4].hex(), 16)
+			h = data[ofs+4:ofs+8].decode()
+			atoms[h] = {"ofs": ofs, "len": alen}
+			ofs += alen
+		except Exception:
+			break
+
+		if ofs >= len(data):
+			break
+
+	return atoms
+
+# Remove the sidx atom from a chunk of data
+def remove_sidx(data):
+	atoms = get_atoms(data)
+	if not 'sidx' in atoms:
+		return data
+
+	sidx = atoms['sidx']
+	ofs = sidx['ofs']
+	rlen = sidx['ofs'] + sidx['len']
+	new_data = data[:ofs] + data[rlen:]
+
+	return new_data
+
 # Download a fragment and send it back via data_queue
 def download_frags(data_type, info, seq_queue, data_queue):
 	downloading = True
 	frag_tries = 0
-	url = info.download_urls[data_type]
+	url = info.mdl_info[data_type].download_url
 	tname = threading.current_thread().getName()
 
 	while downloading:
@@ -686,13 +757,13 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				# will fix that
 
 				with info.lock:
-					if info.active_threads[data_type] > 1:
+					if info.mdl_info[data_type].active_threads > 1:
 						logdebug("{0}: Starved for fragment numbers and multiple fragment threads running".format(tname))
 						logdebug("{0}: Closing this thread to minimize unneeded network requests".format(tname))
 						info.print_status()
 
 						downloading = False
-						info.active_threads[data_type] -= 1
+						info.mdl_info[data_type].active_threads -= 1
 						continue
 
 				if info.is_live:
@@ -715,30 +786,42 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					downloading = False
 					break
 
+		fname = "{0}.frag{1}.ts".format(info.mdl_info[data_type].base_fpath, seq)
+
 		while tries < FRAG_MAX_TRIES and empty_cnt < FRAG_MAX_EMPTY:
 			with info.lock:
 				if info.stopping:
 					downloading = False
 					break
 
-			buf = b''
+			bytes_written = 0
 
+			# TODO: If status is offline mid downloads, wait for it to come back
+			# or be properly ended instead of spamming requests. Requires heartbeat
+			# checks be implemented. Also do not bother if we are not within 2
+			# of the known max sequence number, just continue downloading
 			try:
 				header_seqnum = -1
 				with urllib.request.urlopen(url.format(seq), timeout=info.target_duration * 2) as resp:
-					# TODO: Maybe read in chunks of 4096 bytes instead of all at once
-					# May or may not matter
-					buf = resp.read()
 					header_seqnum = int(resp.getheader("X-Head-Seqnum", -1))
 
-				if len(buf) == 0:
+					with open(fname, 'wb') as frag_file:
+						# Read response data into a file in BUF_SIZE chunks
+						while True:
+							buf = resp.read(BUF_SIZE)
+							if len(buf) == 0:
+								break
+
+							bytes_written += frag_file.write(buf)
+
+				if bytes_written == 0:
 					empty_cnt += 1
 					if empty_cnt < FRAG_MAX_EMPTY:
 						time.sleep(info.target_duration)
 					
 					continue
 
-				data_queue.put(Fragment(seq, buf, header_seqnum))
+				data_queue.put(Fragment(seq, fname, header_seqnum))
 				is_403 = False
 				break
 			except urllib.error.HTTPError as err:
@@ -755,12 +838,12 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					is_403 = True
 
 					with info.lock:
-						new_url = info.download_urls[data_type]
+						new_url = info.mdl_info[data_type].download_url
 
 						if new_url != url:
 							url = new_url
 						elif get_video_info(info):
-							url = info.download_urls[data_type]
+							url = info.mdl_info[data_type].download_url
 				elif err.code == 404:
 					if max_seq > -1:
 						with info.lock:
@@ -779,8 +862,8 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				info.print_status()
 
 				tries += 1
-				if tries >= FRAG_MAX_TRIES and len(buf) > 0:
-					data_queue.put(Fragment(seq, buf, header_seqnum))
+				if tries >= FRAG_MAX_TRIES and bytes_written > 0:
+					data_queue.put(Fragment(seq, fname, header_seqnum))
 					break
 				else:
 					time.sleep(2)
@@ -791,7 +874,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				if max_seq > -1:
 					with info.lock:
 						if not info.is_live and seq >= (max_seq - 2):
-							logdebug("{0}: Stream has ended and fragment within the last two not found, probably not actually created".format(tname))
+							logdebug("{0}: Stream has ended and fragment number is within two of the known max, probably not actually created".format(tname))
 							info.print_status()
 							downloading = False
 							break
@@ -853,13 +936,13 @@ def download_stream(data_type, dfile, progress_queue, info):
 	f = open(dfile, "ab")
 
 	with info.lock:
-		while info.active_threads[data_type] < info.thread_count:
+		while info.mdl_info[data_type].active_threads < info.thread_count:
 			t = threading.Thread(target=download_frags,
 				args=(data_type, info, seq_queue, data_queue),
 				name="{0}{1}".format(data_type, tnum))
 
 			dthreads.append(t)
-			info.active_threads[data_type] += 1
+			info.mdl_info[data_type].active_threads += 1
 			tnum += 1
 			seq_queue.put((cur_seq, max_seqs))
 			cur_seq += 1
@@ -874,17 +957,37 @@ def download_stream(data_type, dfile, progress_queue, info):
 				downloading = True
 				break
 
-		if not downloading:
-			break
-
-		# Get all available data
+		# Get all available data and start another download for each data retrieved
 		while True:
 			try:
 				d = data_queue.get_nowait()
 				data.append(d)
-				active_downloads -= 1
+
+				# We want to empty the queue so we don't leave any files behind
+				if not downloading:
+					continue
+				
+				if d.x_head_seqnum > max_seqs:
+					max_seqs = d.x_head_seqnum
+
+				# If we know the current max sequence number, use that to
+				# determine if we try for another fragment. Else just try anyway
+				if max_seqs > 0:
+					# One higher than known max as we can download faster than
+					# the fragments are made
+					if cur_seq <= max_seqs + 1:
+						seq_queue.put((cur_seq, max_seqs))
+						cur_seq += 1
+					else:
+						active_downloads -= 1
+				else:
+					seq_queue.put((cur_seq, max_seqs))
+					cur_seq += 1
 			except queue.Empty:
 				break
+
+		if not downloading:
+			break
 
 		# Wait for 100ms if no data is available
 		if len(data) == 0:
@@ -893,7 +996,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 				logdebug("{0}-download: Fragment this happened at: {1}".format(data_type, cur_frag))
 				info.print_status()
 
-				while active_downloads < info.active_threads[data_type]:
+				while active_downloads < info.mdl_info[data_type].active_threads:
 					seq_queue.put((cur_seq, max_seqs))
 					cur_seq += 1
 					active_downloads += 1
@@ -910,28 +1013,29 @@ def download_stream(data_type, dfile, progress_queue, info):
 				continue
 
 			try:
-				b = f.write(d.data)
+				bytes_written = 0
+
+				with open(d.fname, 'rb') as rf:
+					buf = rf.read(BUF_SIZE)
+					buf = remove_sidx(buf)
+					bytes_written += f.write(buf)
+
+					while True:
+						buf = rf.read(BUF_SIZE)
+						if len(buf) == 0:
+							break
+
+						bytes_written += f.write(buf)
+
 				cur_frag += 1
-				if d.x_head_seqnum > max_seqs:
-					max_seqs = d.x_head_seqnum
+				progress_queue.put(ProgressInfo(data_type, bytes_written, max_seqs))
 
-				progress_queue.put(ProgressInfo(data_type, b, max_seqs))
+				try:
+					os.remove(d.fname)
+				except Exception as err:
+					print("Error deleting fragment {0}: {1}".format(d.seq, err))
+
 				data.remove(d)
-
-				# If we know the current max sequence number, use that to
-				# determine if we try for another fragment. Else just try anyway
-				if max_seqs > 0:
-					# One higher than known max as we can download faster than
-					# the fragments are made
-					if cur_seq <= max_seqs + 1:
-						seq_queue.put((cur_seq, max_seqs))
-						cur_seq += 1
-						active_downloads += 1
-				else:
-					seq_queue.put((cur_seq, max_seqs))
-					cur_seq += 1
-					active_downloads += 1
-
 				tries = 10
 				i = 0 # Start from the beginning since the next one might have finished downloading earlier
 			except Exception as err:
@@ -946,17 +1050,17 @@ def download_stream(data_type, dfile, progress_queue, info):
 			# Threads closing prematurely possibly due to disk writes taking too long
 			# Open them back up
 			with info.lock:
-				if (max_seqs - cur_seq) > 100 and info.active_threads[data_type] < info.thread_count:
+				if (max_seqs - cur_seq) > 100 and info.mdl_info[data_type].active_threads < info.thread_count:
 					logdebug("{0}-download: More than 100 fragments below the current max and less than the max threads are running".format(data_type))
 					logdebug("{0}-download: Starting more threads".format(data_type))
 
-					while info.active_threads[data_type] < info.thread_count:
+					while info.mdl_info[data_type].active_threads < info.thread_count:
 						t = threading.Thread(target=download_frags,
 							args=(data_type, info, seq_queue, data_queue),
 							name="{0}{1}".format(data_type, tnum))
 
 						dthreads.append(t)
-						info.active_threads[data_type] += 1
+						info.mdl_info[data_type].active_threads += 1
 						tnum += 1
 						seq_queue.put((cur_seq, max_seqs))
 						cur_seq += 1
@@ -982,6 +1086,11 @@ def download_stream(data_type, dfile, progress_queue, info):
 
 	if not f.closed:
 		f.close()
+
+	# Remove any files likely the result of an early termination
+	if len(data) > 0:
+		for d in data:
+			try_delete(d.fname)
 
 	logdebug("{0}-download thread closing".format(data_type))
 	info.print_status()
@@ -1289,8 +1398,10 @@ def main():
 		logerror("Expanded output file path: {0}".format(full_fpath))
 		sys.exit(1)
 
-	afile = os.path.join(DTYPE_AUDIO, "{0}.f{1}.ts".format(fname, AUDIO_ITAG))
-	vfile = os.path.join(DTYPE_VIDEO, "{0}.f{1}.ts".format(fname, info.quality))
+	info.mdl_info[DTYPE_AUDIO].base_fpath = os.path.join(DTYPE_AUDIO, "{0}.f{1}".format(fname, AUDIO_ITAG))
+	info.mdl_info[DTYPE_VIDEO].base_fpath = os.path.join(DTYPE_VIDEO, "{0}.f{1}".format(fname, info.quality))
+	afile = info.mdl_info[DTYPE_AUDIO].base_fpath + ".ts"
+	vfile = info.mdl_info[DTYPE_VIDEO].base_fpath + ".ts"
 	thmbnl_file = os.path.join(DTYPE_VIDEO, "{0}.jpeg".format(fname))
 
 	progress_queue = queue.Queue()
@@ -1315,7 +1426,7 @@ def main():
 	threads.append(athread)
 	athread.start()
 
-	if info.download_urls[DTYPE_VIDEO]:
+	if info.mdl_info[DTYPE_VIDEO].download_url:
 		loginfo("Starting download to {0}".format(vfile))
 		vthread = threading.Thread(target=download_stream, args=(DTYPE_VIDEO, vfile, progress_queue, info))
 		threads.append(vthread)
