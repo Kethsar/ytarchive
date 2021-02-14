@@ -764,7 +764,6 @@ def download_frags(data_type, info, seq_queue, data_queue):
 						info.print_status()
 
 						downloading = False
-						info.mdl_info[data_type].active_threads -= 1
 						continue
 
 				if info.is_live:
@@ -878,6 +877,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 							logdebug("{0}: Stream has ended and fragment number is within two of the known max, probably not actually created".format(tname))
 							info.print_status()
 							downloading = False
+							try_delete(fname)
 							break
 
 				tries += 1
@@ -906,12 +906,14 @@ def download_frags(data_type, info, seq_queue, data_queue):
 							logwarn("{0}: Download link likely expired and stream is privated, cannot coninue download".format(tname))
 							info.print_status()
 							downloading = False
+							try_delete(fname)
 						elif max_seq > -1 and seq < (max_seq - 2) and full_retries > 0:
 							logdebug("{0}: More than two fragments away from the highest known fragment".format(tname))
 							logdebug("{0}: Will try grabbing the fragment {1} more times".format(tname, full_retries))
 							info.print_status()
 						else:
 							downloading = False
+							try_delete(fname)
 					else:
 						logdebug("{0}: Fragment {1}: Stream still live, continuing download attempt".format(tname, seq))
 						info.print_status()
@@ -920,6 +922,9 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 	logdebug("{0}: exiting".format(tname))
 	info.print_status()
+
+	with info.lock:
+		info.mdl_info[data_type].active_threads -= 1
 
 # Download the given data_type stream to dfile
 # Sends progress info through progress_queue
