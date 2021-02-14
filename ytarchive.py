@@ -153,6 +153,7 @@ class MediaDLInfo:
 		self.download_url = ""
 		self.base_fpath = ""
 		self.data_type = ""
+		self.is_vp9 = False
 
 # Miscellaneous information
 class DownloadInfo:
@@ -642,6 +643,7 @@ def get_video_info(info):
 
 					if info.vp9 and video_itag["vp9"] in dl_urls:
 						info.mdl_info[DTYPE_VIDEO].download_url = dl_urls[video_itag["vp9"]]
+						info.mdl_info[DTYPE_VIDEO].is_vp9 = True
 						info.quality = video_itag["vp9"]
 						found = True
 						print("Selected quality: {0} (VP9)".format(q))
@@ -770,6 +772,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					get_video_info(info)
 
 				if not info.is_live:
+					logdebug("{0}: Starved for fragment numbers and stream is offline".format(tname))
 					downloading = False
 				else:
 					logdebug("{0}: Could not get a new fragment to download after {1} tries and we are the only active downloader".format(tname, FRAG_MAX_TRIES))
@@ -875,6 +878,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 			if tries >= FRAG_MAX_TRIES or empty_cnt >= FRAG_MAX_EMPTY:
 				full_retries -= 1
+				try_delete(fname)
 
 				logdebug("{0}: Fragment {1}: {2}/{3} retries; {4}/{5} empty responses".format(
 					tname,
@@ -895,14 +899,12 @@ def download_frags(data_type, info, seq_queue, data_queue):
 							logwarn("{0}: Download link likely expired and stream is privated, cannot coninue download".format(tname))
 							info.print_status()
 							downloading = False
-							try_delete(fname)
 						elif max_seq > -1 and seq < (max_seq - 2) and full_retries > 0:
 							logdebug("{0}: More than two fragments away from the highest known fragment".format(tname))
 							logdebug("{0}: Will try grabbing the fragment {1} more times".format(tname, full_retries))
 							info.print_status()
 						else:
 							downloading = False
-							try_delete(fname)
 					else:
 						logdebug("{0}: Fragment {1}: Stream still live, continuing download attempt".format(tname, seq))
 						info.print_status()
@@ -957,6 +959,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 			try:
 				d = data_queue.get_nowait()
 				data.append(d)
+				active_downloads -= 1
 
 				# We want to empty the queue so we don't leave any files behind
 				if not downloading:
@@ -967,17 +970,16 @@ def download_stream(data_type, dfile, progress_queue, info):
 
 				# If we know the current max sequence number, use that to
 				# determine if we try for another fragment. Else just try anyway
-				if max_seqs > 0:
+				if max_seqs > 0 and cur_seq <= max_seqs + 1:
 					# One higher than known max as we can download faster than
 					# the fragments are made
-					if cur_seq <= max_seqs + 1:
-						seq_queue.put((cur_seq, max_seqs))
-						cur_seq += 1
-					else:
-						active_downloads -= 1
+					seq_queue.put((cur_seq, max_seqs))
+					cur_seq += 1
+					active_downloads += 1
 				else:
 					seq_queue.put((cur_seq, max_seqs))
 					cur_seq += 1
+					active_downloads += 1
 			except queue.Empty:
 				break
 
@@ -1012,7 +1014,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 
 				with open(d.fname, 'rb') as rf:
 					# Only attempt to remove sidx from video fragments
-					if data_type == DTYPE_VIDEO:
+					if data_type == DTYPE_VIDEO and not info.mdl_info[data_type].is_vp9:
 						buf = rf.read(BUF_SIZE)
 						buf = remove_sidx(buf)
 						bytes_written += f.write(buf)
