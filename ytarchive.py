@@ -637,6 +637,7 @@ def get_video_info(info):
 					if aonly:
 						info.quality = video_itag
 						info.mdl_info[DTYPE_VIDEO].download_url = ""
+						found = True
 						break
 
 					if info.vp9 and video_itag["vp9"] in dl_urls:
@@ -1016,9 +1017,11 @@ def download_stream(data_type, dfile, progress_queue, info):
 				bytes_written = 0
 
 				with open(d.fname, 'rb') as rf:
-					buf = rf.read(BUF_SIZE)
-					buf = remove_sidx(buf)
-					bytes_written += f.write(buf)
+					# Only attempt to remove sidx from video fragments
+					if data_type == DTYPE_VIDEO:
+						buf = rf.read(BUF_SIZE)
+						buf = remove_sidx(buf)
+						bytes_written += f.write(buf)
 
 					while True:
 						buf = rf.read(BUF_SIZE)
@@ -1033,7 +1036,8 @@ def download_stream(data_type, dfile, progress_queue, info):
 				try:
 					os.remove(d.fname)
 				except Exception as err:
-					print("Error deleting fragment {0}: {1}".format(d.seq, err))
+					logwarn("{0}-download: Error deleting fragment {1}: {2}".format(data_type, d.seq, err))
+					info.print_status()
 
 				data.remove(d)
 				tries = 10
