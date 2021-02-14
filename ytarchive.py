@@ -856,17 +856,6 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				tries += 1
 				if tries < FRAG_MAX_TRIES:
 					time.sleep(2)
-			except http.client.IncompleteRead as err:
-				# Seems to happen on the last chunk that has data. Maybe.
-				logdebug("{0}: Incomplete read on fragment {1}: {2}".format(tname, seq, err))
-				info.print_status()
-
-				tries += 1
-				if tries >= FRAG_MAX_TRIES and bytes_written > 0:
-					data_queue.put(Fragment(seq, fname, header_seqnum))
-					break
-				else:
-					time.sleep(2)
 			except Exception as err:
 				logdebug("{0}: Error with fragment {1}: {2}".format(tname, seq, err))
 				info.print_status()
