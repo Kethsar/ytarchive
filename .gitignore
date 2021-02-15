@@ -1,0 +1,14 @@
+# python
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.spec
+.vscode/
+
+# Files being used for testing/information
+# but not needed in the repo
+*.xml
+*.json
+*.txt
+getvinfo.py
