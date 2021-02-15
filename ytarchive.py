@@ -48,6 +48,8 @@ import xml.etree.ElementTree as ET
 		}
 
 		Ask to wait or poll if neither --wait or --retry-stream are given
+		Ask if user wants to clean up if they respond no to muxing files
+			after a manual download termination
 '''
 
 # Constants
@@ -697,8 +699,8 @@ def get_atoms(data):
 		# We should be fine and not run into errors, but I do dumb things
 		try:
 			alen = int(data[ofs:ofs+4].hex(), 16)
-			h = data[ofs+4:ofs+8].decode()
-			atoms[h] = {"ofs": ofs, "len": alen}
+			aname = data[ofs+4:ofs+8].decode()
+			atoms[aname] = {"ofs": ofs, "len": alen}
 			ofs += alen
 		except Exception:
 			break
