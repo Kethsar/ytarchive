@@ -7,6 +7,7 @@ Attempt to archive a given Youtube livestream from the start. This is most usefu
 - For *nix systems, Python 3 is required, and should already be installed unless your system is 10 years old.
 
 - For Windows, an all-in-one binary is provided for each release. If you want to run the script on its own, you will also need Python 3.
+
 # Usage
 
 ```

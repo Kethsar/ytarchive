@@ -18,6 +18,8 @@ import logging
 import xml.etree.ElementTree as ET
 
 '''
+	https://github.com/Kethsar/ytarchive
+	
 	TODO:
 		Use heartbeat API to continually check if the stream is online still
 		hb_apikey = parsedinfo['innertube_api_key'][0]
