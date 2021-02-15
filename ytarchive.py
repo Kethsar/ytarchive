@@ -48,8 +48,11 @@ import xml.etree.ElementTree as ET
 		}
 
 		Ask to wait or poll if neither --wait or --retry-stream are given
+
 		Ask if user wants to clean up if they respond no to muxing files
-			after a manual download termination
+		after a manual download termination
+		
+		Potentially add an ini config
 '''
 
 # Constants
