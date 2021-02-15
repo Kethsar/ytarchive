@@ -768,17 +768,17 @@ def download_frags(data_type, info, seq_queue, data_queue):
 						downloading = False
 						continue
 
-				if info.is_live:
-					get_video_info(info)
+					if info.is_live:
+						get_video_info(info)
 
-				if not info.is_live:
-					logdebug("{0}: Starved for fragment numbers and stream is offline".format(tname))
-					downloading = False
-				else:
-					logdebug("{0}: Could not get a new fragment to download after {1} tries and we are the only active downloader".format(tname, FRAG_MAX_TRIES))
-					logdebug("{0}: That is an issue, hopefully it will correct itself".format(tname))
-					info.print_status()
-					frag_tries = 0
+					if not info.is_live:
+						logdebug("{0}: Starved for fragment numbers and stream is offline".format(tname))
+						downloading = False
+					else:
+						logdebug("{0}: Could not get a new fragment to download after {1} tries and we are the only active downloader".format(tname, FRAG_MAX_TRIES))
+						logdebug("{0}: That is an issue, hopefully it will correct itself".format(tname))
+						info.print_status()
+						frag_tries = 0
 
 			continue
 
@@ -876,7 +876,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				if tries < FRAG_MAX_TRIES:
 					time.sleep(2)
 
-			if tries >= FRAG_MAX_TRIES or empty_cnt >= FRAG_MAX_EMPTY:
+			if tries >= FRAG_MAX_TRIES:
 				full_retries -= 1
 				try_delete(fname)
 
@@ -910,6 +910,9 @@ def download_frags(data_type, info, seq_queue, data_queue):
 						info.print_status()
 						tries = 0
 						empty_cnt = 0
+
+		if empty_cnt >= FRAG_MAX_EMPTY:
+			try_delete(fname)
 
 	logdebug("{0}: exiting".format(tname))
 	info.print_status()
@@ -993,10 +996,11 @@ def download_stream(data_type, dfile, progress_queue, info):
 				logdebug("{0}-download: Fragment this happened at: {1}".format(data_type, cur_frag))
 				info.print_status()
 
-				while active_downloads < info.mdl_info[data_type].active_threads:
-					seq_queue.put((cur_seq, max_seqs))
-					cur_seq += 1
-					active_downloads += 1
+				with info.lock:
+					while active_downloads < info.mdl_info[data_type].active_threads:
+						seq_queue.put((cur_seq, max_seqs))
+						cur_seq += 1
+						active_downloads += 1
 
 			time.sleep(0.1)
 			continue
@@ -1070,9 +1074,10 @@ def download_stream(data_type, dfile, progress_queue, info):
 		# Refresh the info every hour to keep our download URLs up to date
 		# Might not actually be that helpful but will prevent last-second
 		# expiration while still downloading a stream that was privated after ending
-		updated_secs = time.time() - info.last_updated
-		if not info.is_unavailable and updated_secs > HOUR:
-			get_video_info(info)
+		with info.lock:
+			updated_secs = time.time() - info.last_updated
+			if not info.is_unavailable and updated_secs > HOUR:
+				get_video_info(info)
 
 		if tries <= 0:
 			logwarn("{0}-download: Stopping download, something must be wrong...".format(data_type))
