@@ -1,5 +1,5 @@
 # ytarchive
-Attempt to archive a given Youtube livestream from the start. This is most useful for streams that have already started and you want to download. If you know ahead of time you want to archive a stream, it would probably be better to use [streamlink](https://streamlink.github.io/) or [youtube-dl](https://youtube-dl.org/), as both are more robust and more likely to be continually updated. Probably. The only dowside being neither can grab VP9 for streams where available.
+Attempt to archive a given Youtube livestream from the start. This is most useful for streams that have already started and you want to download. If you know ahead of time you want to archive a stream, it would probably be better to use [streamlink](https://streamlink.github.io/) or [youtube-dl](https://youtube-dl.org/), as both are more robust and more likely to be continually updated. Probably. The only downside being neither can grab VP9 for streams where available.
 
 # Dependencies
 - [FFmpeg](https://ffmpeg.org/) needs to be installed to mux the final file.

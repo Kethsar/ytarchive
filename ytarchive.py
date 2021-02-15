@@ -19,7 +19,7 @@ import xml.etree.ElementTree as ET
 
 '''
 	https://github.com/Kethsar/ytarchive
-	
+
 	TODO:
 		Use heartbeat API to continually check if the stream is online still
 		hb_apikey = parsedinfo['innertube_api_key'][0]
@@ -414,11 +414,16 @@ def get_playable_player_response(info):
 		elif playability_status == PLAYABLE_UNPLAYABLE:
 			logged_in = not player_response["responseContext"]["mainAppWebResponseContext"]["loggedOut"]
 
-			print("Playability status: Unplayable.")
+			print("\nPlayability status: Unplayable.")
 			print("Reason: {0}".format(playability["reason"]))
 			print("Logged in status: {0}".format(logged_in))
 			print("If this is a members only stream, you provided a cookies.txt file, and the above 'logged in' status is not True, please try updating your cookies file.")
 			print("Also check if your cookies file includes '#HttpOnly_' in front of some lines. If it does, delete that part of those lines and try again.")
+
+			if info.in_progress:
+				info.print_status()
+				info.is_live = False
+				info.is_unavailable = True
 			return None
 
 		elif playability_status == PLAYABLE_OFFLINE:
@@ -903,7 +908,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 					if not info.is_live:
 						if info.is_unavailable and is_403:
-							logwarn("{0}: Download link likely expired and stream is privated, cannot coninue download".format(tname))
+							logwarn("{0}: Download link likely expired and stream is privated or members only, cannot coninue download".format(tname))
 							info.print_status()
 							downloading = False
 						elif max_seq > -1 and seq < (max_seq - 2) and full_retries > 0:
