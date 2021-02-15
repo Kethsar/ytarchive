@@ -405,20 +405,20 @@ def get_playable_player_response(info):
 			selected_qualities = parse_quality_list(list(VIDEO_LABEL_ITAGS.keys()), info.selected_quality)
 
 		if playability_status == PLAYABLE_ERROR:
-			print("Playability status: ERROR. Reason: {0}".format(playability["reason"]))
+			logwarn("Playability status: ERROR. Reason: {0}".format(playability["reason"]))
 			if info.in_progress:
-				print("Finishing download")
+				loginfo("Finishing download")
 				info.is_live = False
 			return None
 
 		elif playability_status == PLAYABLE_UNPLAYABLE:
 			logged_in = not player_response["responseContext"]["mainAppWebResponseContext"]["loggedOut"]
 
-			print("\nPlayability status: Unplayable.")
-			print("Reason: {0}".format(playability["reason"]))
-			print("Logged in status: {0}".format(logged_in))
-			print("If this is a members only stream, you provided a cookies.txt file, and the above 'logged in' status is not True, please try updating your cookies file.")
-			print("Also check if your cookies file includes '#HttpOnly_' in front of some lines. If it does, delete that part of those lines and try again.")
+			logwarn("Playability status: Unplayable.")
+			logwarn("Reason: {0}".format(playability["reason"]))
+			logwarn("Logged in status: {0}".format(logged_in))
+			logwarn("If this is a members only stream, you provided a cookies.txt file, and the above 'logged in' status is not True, please try updating your cookies file.")
+			logwarn("Also check if your cookies file includes '#HttpOnly_' in front of some lines. If it does, delete that part of those lines and try again.")
 
 			if info.in_progress:
 				info.print_status()
