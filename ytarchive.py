@@ -482,15 +482,17 @@ def get_playable_player_response(info):
 				# We've waited until the scheduled time
 				continue
 
-			first_wait = False
+
+			if first_wait:
+				print("Stream should have started, checking back everything {0} seconds".format(RECHECK_TIME))
+				first_wait = False
 
 			# If we get this far, the stream's scheduled time has passed but it's still not started
 			# Check every 15 seconds
-			if not first_wait:
-				time.sleep(RECHECK_TIME)
-				secs_late += RECHECK_TIME
-				print("\rStream is {0} seconds late...".format(secs_late), end="")
-				continue
+			time.sleep(RECHECK_TIME)
+			secs_late += RECHECK_TIME
+			print("\rStream is {0} seconds late...".format(secs_late), end="")
+			continue
 
 		elif playability_status != PLAYABLE_OK:
 			if secs_late > 0:
