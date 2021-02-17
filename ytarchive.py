@@ -881,9 +881,9 @@ def download_frags(data_type, info, seq_queue, data_queue):
 					with info.lock:
 						if not info.is_live and seq >= (max_seq - 2):
 							logdebug("{0}: Stream has ended and fragment number is within two of the known max, probably not actually created".format(tname))
-							info.print_status()
 							downloading = False
 							try_delete(fname)
+							info.print_status()
 							break
 
 				tries += 1
@@ -893,6 +893,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 			if tries >= FRAG_MAX_TRIES:
 				full_retries -= 1
 				try_delete(fname)
+				info.print_status()
 
 				logdebug("{0}: Fragment {1}: {2}/{3} retries; {4}/{5} empty responses".format(
 					tname,
@@ -927,6 +928,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 		if empty_cnt >= FRAG_MAX_EMPTY:
 			try_delete(fname)
+			info.print_status()
 
 	logdebug("{0}: exiting".format(tname))
 	info.print_status()
