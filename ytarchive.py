@@ -1,4 +1,4 @@
-#!/bin/env python3
+#!/usr/bin/env python3
 import urllib.parse
 import urllib.request
 import urllib.error
