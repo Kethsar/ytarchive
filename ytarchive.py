@@ -1502,7 +1502,7 @@ def main():
 		if not alive:
 			break
 
-	print()
+	print("\nDownload finished")
 	aonly = info.quality == VIDEO_LABEL_ITAGS["audio_only"]
 
 	# Attempt to mux the video and audio files using ffmpeg
@@ -1546,10 +1546,10 @@ def main():
 		ffmpeg_args.extend(["-i", thmbnl_file])
 
 	if aonly:
-		loginfo("Correcting audio container")
+		print("Correcting audio container")
 		mfile = os.path.join(fdir, "{0}.m4a".format(fname))
 	else:
-		loginfo("Muxing files")
+		print("Muxing files")
 		mfile = os.path.join(fdir, "{0}.mp4".format(fname))
 
 		ffmpeg_args.extend(["-i", vfile])
