@@ -484,7 +484,7 @@ def get_playable_player_response(info):
 
 
 			if first_wait:
-				print("Stream should have started, checking back everything {0} seconds".format(RECHECK_TIME))
+				print("Stream should have started, checking back every {0} seconds".format(RECHECK_TIME))
 				first_wait = False
 
 			# If we get this far, the stream's scheduled time has passed but it's still not started
