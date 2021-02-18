@@ -949,6 +949,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 	tnum = 0
 	dthreads = []
 	data = []
+	del_frags = []
 	f = open(dfile, "ab")
 
 	with info.lock:
@@ -1054,6 +1055,8 @@ def download_stream(data_type, dfile, progress_queue, info):
 					os.remove(d.fname)
 				except Exception as err:
 					logwarn("{0}-download: Error deleting fragment {1}: {2}".format(data_type, d.seq, err))
+					logwarn("{0}-download: Will try again after the download has finished".format(data_type))
+					del_frags.append(d.fname)
 					info.print_status()
 
 				data.remove(d)
@@ -1113,6 +1116,12 @@ def download_stream(data_type, dfile, progress_queue, info):
 	if len(data) > 0:
 		for d in data:
 			try_delete(d.fname)
+	
+	# Attempt to remove any files that failed to be removed earlier
+	if len(del_frags) > 0:
+		loginfo("{0}-download: Attempting to delete fragments that failed to be deleted before".format(data_type))
+		for d in del_frags:
+			try_delete(d)
 
 	logdebug("{0}-download thread closing".format(data_type))
 	info.print_status()
