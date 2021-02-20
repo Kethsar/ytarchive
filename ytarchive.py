@@ -947,6 +947,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 	max_seqs = -1
 	tries = 10
 	tnum = 0
+	stopping = False
 	dthreads = []
 	data = []
 	del_frags = []
@@ -969,6 +970,9 @@ def download_stream(data_type, dfile, progress_queue, info):
 	while True:
 		downloading = False
 
+		with info.lock:
+			stopping = info.stopping
+
 		for t in dthreads:
 			if t.is_alive():
 				downloading = True
@@ -982,7 +986,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 				active_downloads -= 1
 
 				# We want to empty the queue so we don't leave any files behind
-				if not downloading:
+				if not downloading or stopping:
 					continue
 				
 				if d.x_head_seqnum > max_seqs:
@@ -1009,7 +1013,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 
 		# Wait for 100ms if no data is available
 		if len(data) == 0:
-			if active_downloads <= 0:
+			if not stopping and active_downloads <= 0:
 				logdebug("{0}-download: Somehow no active downloads and no data to write".format(data_type))
 				logdebug("{0}-download: Fragment this happened at: {1}".format(data_type, cur_frag))
 				info.print_status()
@@ -1070,6 +1074,9 @@ def download_stream(data_type, dfile, progress_queue, info):
 				if tries > 0:
 					logwarn("{0}-download: Will try {1} more time(s)".format(data_type, tries))
 					info.print_status()
+
+			if stopping:
+				continue
 
 			# Threads closing prematurely possibly due to disk writes taking too long
 			# Open them back up
