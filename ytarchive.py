@@ -717,7 +717,7 @@ def get_atoms(data):
 		except Exception:
 			break
 
-		if ofs >= len(data):
+		if ofs+8 >= len(data):
 			break
 
 	return atoms
