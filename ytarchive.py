@@ -255,7 +255,7 @@ def format_size(bsize):
 # Returns the process return code, or -1 on unknown error
 def execute(args):
 	retcode = 0
-	logdebug("Executing command: {0}".format(shlex.join(args)))
+	logdebug("Executing command: {0}".format(" ".join(shlex.quote(x) for x in args)))
 
 	try:
 		if sys.version_info.major == 3 and sys.version_info.minor >= 5:
@@ -1582,7 +1582,7 @@ def main():
 		pcmd = get_yes_no("Would you like the command to be printed? If you used --add-metadata, this will be huge.")
 
 		if pcmd:
-			print(shlex.join(ffmpeg_args))
+			print(" ".join(shlex.quote(x) for x in ffmpeg_args))
 			
 		sys.exit(0)
 
