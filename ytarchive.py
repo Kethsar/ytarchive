@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-import urllib.parse
-import urllib.request
-import urllib.error
+import calendar
+import getopt
 import http.client
 import http.cookiejar
 import json
-import sys
-import time
-import calendar
-import threading
+import logging
 import os
 import queue
+import shlex
 import shutil
 import subprocess
-import getopt
-import logging
+import sys
+import time
+import threading
+import urllib.parse
+import urllib.request
+import urllib.error
 import xml.etree.ElementTree as ET
 
 '''
@@ -254,7 +255,7 @@ def format_size(bsize):
 # Returns the process return code, or -1 on unknown error
 def execute(args):
 	retcode = 0
-	logdebug("Executing command: {0}".format(" ".join(args)))
+	logdebug("Executing command: {0}".format(shlex.join(args)))
 
 	try:
 		if sys.version_info.major == 3 and sys.version_info.minor >= 5:
@@ -1526,22 +1527,6 @@ def main():
 		print("Mismatched number of video and audio fragments.")
 		print("The files should still be mergable but data might be missing somewhere.")
 
-	ffmpeg = shutil.which("ffmpeg")
-	if not ffmpeg:
-		print("ffmpeg not found. Please install ffmpeg.")
-
-		if aonly:
-			print("To place the audio in its proper container, run the following command:")
-			print("ffmpeg -i {0} -c copy {1}.m4a".format(afile, fname))
-		else:
-			print("To merge the files, run the following command:")
-			print("ffmpeg -i {0} -i {1} -c copy {2}.mp4".format(vfile, afile, fname))
-			
-		sys.exit(0)
-
-	retcode = 0
-	mfile = ""
-
 	# Output format included a directory structure. Create it if it doesn't exist
 	if fdir:
 		try:
@@ -1551,6 +1536,8 @@ def main():
 			logwarn("The final file will be placed in the current working directory")
 			fdir = ""
 
+	retcode = 0
+	mfile = ""
 	ffmpeg_args = [
 		"ffmpeg",
 		"-hide_banner",
@@ -1588,6 +1575,17 @@ def main():
 			])
 	
 	ffmpeg_args.append(mfile)
+
+	ffmpeg = shutil.which("ffmpeg")
+	if not ffmpeg:
+		print("ffmpeg not found. Please install ffmpeg.")
+		pcmd = get_yes_no("Would you like the command to be printed? If you used --add-metadata, this will be huge.")
+
+		if pcmd:
+			print(shlex.join(ffmpeg_args))
+			
+		sys.exit(0)
+
 	retcode = execute(ffmpeg_args)
 
 	if retcode != 0:
