@@ -530,6 +530,11 @@ def get_urls_from_manifest(manifest):
 			itag = r.get("id")
 			url = r.find("{*}BaseURL").text + "sq/{0}"
 
+			try:
+				int(itag)
+			except Exception:
+				continue
+
 			if itag and url:
 				urls[int(itag)] = url
 	except Exception as err:
@@ -1041,7 +1046,8 @@ def download_stream(data_type, dfile, progress_queue, info):
 
 				with open(d.fname, 'rb') as rf:
 					# Only attempt to remove sidx from video fragments
-					if data_type == DTYPE_VIDEO and not info.mdl_info[data_type].is_vp9:
+					if (data_type == DTYPE_AUDIO or
+						(data_type == DTYPE_VIDEO and not info.mdl_info[data_type].is_vp9)):
 						buf = rf.read(BUF_SIZE)
 						buf = remove_sidx(buf)
 						bytes_written += f.write(buf)
