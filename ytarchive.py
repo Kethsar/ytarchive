@@ -717,6 +717,9 @@ def get_atoms(data):
 		# We should be fine and not run into errors, but I do dumb things
 		try:
 			alen = int(data[ofs:ofs+4].hex(), 16)
+			if alen > len(data):
+				break
+
 			aname = data[ofs+4:ofs+8].decode()
 			atoms[aname] = {"ofs": ofs, "len": alen}
 			ofs += alen
@@ -1045,12 +1048,11 @@ def download_stream(data_type, dfile, progress_queue, info):
 				bytes_written = 0
 
 				with open(d.fname, 'rb') as rf:
-					# Only attempt to remove sidx from video fragments
-					if (data_type == DTYPE_AUDIO or
-						(data_type == DTYPE_VIDEO and not info.mdl_info[data_type].is_vp9)):
-						buf = rf.read(BUF_SIZE)
-						buf = remove_sidx(buf)
-						bytes_written += f.write(buf)
+					# Remvoe sidx atoms from video and audio
+					# Fixes an issue with streams encoded differently than normal
+					buf = rf.read(BUF_SIZE)
+					buf = remove_sidx(buf)
+					bytes_written += f.write(buf)
 
 					while True:
 						buf = rf.read(BUF_SIZE)
