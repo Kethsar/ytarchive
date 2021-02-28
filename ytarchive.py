@@ -258,7 +258,10 @@ def execute(args):
 	logdebug("Executing command: {0}".format(" ".join(shlex.quote(x) for x in args)))
 
 	try:
-			retcode = subprocess.run(args).returncode
+			retcode = subprocess.run(args, capture_output=True, check=True, encoding='utf-8').returncode
+	except subprocess.CalledProcessError as err:
+			retcode = err.returncode
+			logerror(err.stderr)
 	except Exception as err:
 		logerror(err)
 		retcode = -1
@@ -1546,7 +1549,7 @@ def main():
 	ffmpeg_args = [
 		"ffmpeg",
 		"-hide_banner",
-		"-loglevel", "fatal",
+		"-loglevel", "warning",
 		"-i", afile
 	]
 
@@ -1595,6 +1598,7 @@ def main():
 
 	if retcode != 0:
 		print("execute returned code {0}. Something must have gone wrong with ffmpeg.".format(retcode))
+		print("The .ts files will not be deleted in case the final file is broken.")
 		sys.exit(retcode)
 
 	try_delete(afile)
