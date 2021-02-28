@@ -1532,8 +1532,8 @@ def main():
 
 	# Attempt to mux the video and audio files using ffmpeg
 	if not aonly and frags[DTYPE_AUDIO] != frags[DTYPE_VIDEO]:
-		print("Mismatched number of video and audio fragments.")
-		print("The files should still be mergable but data might be missing somewhere.")
+		logwarn("Mismatched number of video and audio fragments.")
+		logwarn("The files should still be mergable but data might be missing somewhere.")
 
 	# Output format included a directory structure. Create it if it doesn't exist
 	if fdir:
