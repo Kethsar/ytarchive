@@ -258,10 +258,7 @@ def execute(args):
 	logdebug("Executing command: {0}".format(" ".join(shlex.quote(x) for x in args)))
 
 	try:
-		if sys.version_info.major == 3 and sys.version_info.minor >= 5:
 			retcode = subprocess.run(args).returncode
-		else:
-			retcode = subprocess.call(args)
 	except Exception as err:
 		logerror(err)
 		retcode = -1
