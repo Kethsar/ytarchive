@@ -55,7 +55,9 @@ import xml.etree.ElementTree as ET
 		Ask if user wants to clean up if they respond no to muxing files
 		after a manual download termination
 		
-		Potentially add an ini config
+		Maybe add options to force IPv4 or IPv6
+		Seems like it will be a massive fucking pain though, while keeping this
+		free of dependencies.
 '''
 
 # Constants
@@ -1563,7 +1565,11 @@ def main():
 		print("Muxing files")
 		mfile = os.path.join(fdir, "{0}.mp4".format(fname))
 
-		ffmpeg_args.extend(["-i", vfile])
+		ffmpeg_args.extend([
+			"-i", vfile,
+			"-movflags", "faststart"
+			])
+
 		if thumbnail:
 			ffmpeg_args.extend([
 				"-map", "0",
