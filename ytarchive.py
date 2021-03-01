@@ -297,7 +297,7 @@ def download_thumbnail(url, fname):
 def get_player_response(vid):
 	vinfo = download_as_text(INFO_URL.format(vid))
 
-	if len(vinfo) == 0:
+	if not vinfo or len(vinfo) == 0:
 		logwarn("No video information found, somehow")
 		return None
 
