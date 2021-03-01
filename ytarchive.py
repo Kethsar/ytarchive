@@ -269,6 +269,13 @@ def execute(args):
 
 	return retcode
 
+# Patch socket.getaddrinfo() to allow forcing IPv4 or IPv6
+def patch_getaddrinfo(inet_family):
+	orig_getaddrinfo = socket.getaddrinfo
+	def new_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+		return orig_getaddrinfo(host=host, port=port, family=inet_family, type=type, proto=proto, flags=flags)
+	socket.getaddrinfo = new_getaddrinfo
+
 # Download data from the given URL and return it as unicode text
 def download_as_text(url):
 	data = b''
@@ -1386,11 +1393,7 @@ def main():
 
 	logging.basicConfig(format="\r%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=loglevel)
 
-	# Set up inet_family
-	orig_getaddrinfo = socket.getaddrinfo
-	def new_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
-		return orig_getaddrinfo(host=host, port=port, family=inet_family, type=type, proto=proto, flags=flags)
-	socket.getaddrinfo = new_getaddrinfo
+	patch_getaddrinfo(inet_family)
 
 	if len(args) > 1:
 		info.url = args[0]
