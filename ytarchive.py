@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-import calendar
 import getopt
-import http.client
 import http.cookiejar
 import json
 import logging
@@ -9,6 +7,7 @@ import os
 import queue
 import shlex
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -1314,10 +1313,11 @@ def main():
 	add_meta = False
 	verbose = False
 	debug = False
+	inet_family = 0
 
 	try:
 		opts, args = getopt.getopt(sys.argv[1:],
-			"hwntvc:r:o:",
+			"hwntv46c:r:o:",
 			[
 				"help",
 				"wait",
@@ -1327,6 +1327,8 @@ def main():
 				"debug",
 				"vp9",
 				"add-metadata",
+				"ipv4",
+				"ipv6",
 				"cookies=",
 				"retry-stream=",
 				"output=",
@@ -1356,6 +1358,10 @@ def main():
 			debug = True
 		elif o == "--add-metadata":
 			add_meta = True
+		elif o in ("-4", "--ipv4"):
+			inet_family = socket.AF_INET
+		elif o in ("-6", "--ipv6"):
+			inet_family = socket.AF_INET6
 		elif o in ("-c", "--cookies"):
 			cfile = a
 		elif o in ("-o", "--output"):
@@ -1379,6 +1385,12 @@ def main():
 		loglevel = logging.INFO
 
 	logging.basicConfig(format="\r%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=loglevel)
+
+	# Set up inet_family
+	orig_getaddrinfo = socket.getaddrinfo
+	def new_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+		return orig_getaddrinfo(host=host, port=port, family=inet_family, type=type, proto=proto, flags=flags)
+	socket.getaddrinfo = new_getaddrinfo
 
 	if len(args) > 1:
 		info.url = args[0]
