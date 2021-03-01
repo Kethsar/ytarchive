@@ -48,8 +48,6 @@ import xml.etree.ElementTree as ET
 				}
 			]
 		}
-
-		Ask to wait or poll if neither --wait or --retry-stream are given
 '''
 
 # Constants
@@ -355,18 +353,28 @@ def get_quality_from_user(formats, waiting=False):
 	return selected_qualities
 
 def get_yes_no(msg):
-	yesno = input("{0} [y/N]: ".format(msg)).strip()
-	return yesno.lower().startswith("y")
+	yesno = input("{0} [y/N]: ".format(msg)).lower().strip()
+	return yesno.startswith("y")
 
 # Ask if the user wants to wait for a scheduled stream to start and then record it
-def ask_wait_for_stream(url):
+def ask_wait_for_stream(url, info):
 	print("{0} is probably a future scheduled livestream.".format(url))
-	print("I would highly recommend using streamlink with the --retry-streams argument.")
-	print("Example: streamlink --retry-streams=15 -o 'title.mp4' '{0}' best".format(url))
-	print()
-	print("I can do this instead of you don't have streamlink.")
+	print("Would you like to wait for the scheduled start time, poll until it starts, or not wait?")
+	choice = input("wait/poll/[no]: ").lower().strip()
 
-	return get_yes_no("Wait for the livestream and record it?")
+	if choice.startswith("wait"):
+		return True
+	elif choice.startswith("poll"):
+		secs = input("Input poll interval in seconds (15 or more recommended): ").strip()
+		try:
+			info.retry_secs = abs(int(secs))
+		except Exception:
+			logerror("Poll interval must be a whole number. Given {0}".format(secs))
+			sys.exit(1)
+
+		return True
+
+	return False
 
 # Keep retrieving the player response object until the playability status is OK
 def get_playable_player_response(info):
@@ -438,8 +446,8 @@ def get_playable_player_response(info):
 				print("Stream appears to be a future scheduled stream, and you opted not to wait.")
 				return None
 
-			if first_wait and info.wait == WAIT_ASK:
-				if not ask_wait_for_stream(url):
+			if first_wait and info.wait == WAIT_ASK and info.retry_secs == 0:
+				if not ask_wait_for_stream(url, info):
 					return None
 
 			if first_wait:
@@ -1377,7 +1385,7 @@ def main():
 			try:
 				info.retry_secs = abs(int(a)) # Just abs it, don't bother dealing with negatives
 			except Exception:
-				logerror("retry-stream must be given a number argument. Given {0}".format(a))
+				logerror("retry-stream must be given a whole number argument. Given {0}".format(a))
 				sys.exit(1)
 		else:
 			assert False, "Unhandled option"
