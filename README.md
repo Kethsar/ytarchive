@@ -28,6 +28,12 @@ Options:
 	-h, --help
 		Show this help message.
 
+	-4, --ipv4
+		Make all connections using IPv4.
+
+	-6, --ipv6
+		Make all connections using IPv6.
+
 	--add-metadata
 		Write some basic metadata information to the final file.
 

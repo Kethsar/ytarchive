@@ -1231,6 +1231,14 @@ def print_help():
 	print("\t\tShow this help message.")
 	print()
 
+	print("\t-4, --ipv4")
+	print("\t\tMake all connections using IPv4.")
+	print()
+
+	print("\t-6, --ipv6")
+	print("\t\tMake all connections using IPv6.")
+	print()
+
 	print("\t--add-metadata")
 	print("\t\tWrite some basic metadata information to the final file.")
 	print()
