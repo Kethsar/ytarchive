@@ -50,13 +50,6 @@ import xml.etree.ElementTree as ET
 		}
 
 		Ask to wait or poll if neither --wait or --retry-stream are given
-
-		Ask if user wants to clean up if they respond no to muxing files
-		after a manual download termination
-		
-		Maybe add options to force IPv4 or IPv6
-		Seems like it will be a massive fucking pain though, while keeping this
-		free of dependencies.
 '''
 
 # Constants
@@ -1203,6 +1196,10 @@ def try_delete(fname):
 	except Exception as err:
 		print("Error deleting file: {0}".format(err))
 
+def cleanup_files(files):
+	for f in files:
+		try_delete(f)
+
 def print_help():
 	fname = os.path.basename(sys.argv[0])
 
@@ -1321,6 +1318,7 @@ def main():
 	verbose = False
 	debug = False
 	inet_family = 0
+	files = []
 
 	try:
 		opts, args = getopt.getopt(sys.argv[1:],
@@ -1483,18 +1481,22 @@ def main():
 		# Failed to download but file itself got created. Remove it
 		if not thumbnail and os.path.exists(thmbnl_file):
 			try_delete(thmbnl_file)
+		else:
+			files.append(thmbnl_file)
 
 	
 	loginfo("Starting download to {0}".format(afile))
 	athread = threading.Thread(target=download_stream, args=(DTYPE_AUDIO, afile, progress_queue, info))
 	threads.append(athread)
 	athread.start()
+	files.append(afile)
 
 	if info.mdl_info[DTYPE_VIDEO].download_url:
 		loginfo("Starting download to {0}".format(vfile))
 		vthread = threading.Thread(target=download_stream, args=(DTYPE_VIDEO, vfile, progress_queue, info))
 		threads.append(vthread)
 		vthread.start()
+		files.append(vfile)
 
 	# Print progress to stdout
 	# Included info is video and audio fragments downloaded, and total data downloaded
@@ -1539,6 +1541,10 @@ def main():
 			if merge:
 				alive = False
 			else:
+				cleanup = get_yes_no("\nWould you like any files that were created to be deleted?")
+				if cleanup:
+					cleanup_files(files)
+
 				sys.exit(2)
 		
 		if not alive:
@@ -1622,10 +1628,7 @@ def main():
 		print("The .ts files will not be deleted in case the final file is broken.")
 		sys.exit(retcode)
 
-	try_delete(afile)
-	try_delete(vfile)
-	if thumbnail:
-		try_delete(thmbnl_file)
+	cleanup_files(files)
 
 	print()
 	print("Final file: {0}".format(mfile))
