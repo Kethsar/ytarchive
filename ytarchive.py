@@ -10,6 +10,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import threading
 import urllib.parse
@@ -1173,6 +1174,15 @@ def get_video_id(url):
 
 	return vid
 
+# Attempt to move src_file to dst_file
+def try_move(src_file, dst_file):
+	try:
+		if os.path.exists(src_file):
+			loginfo("Moving file {0} to {1}".format(src_file, dst_file))
+			os.replace(src_file, dst_file)
+	except Exception as err:
+		logwarn("Error moving file: {0}".format(err))
+
 # Attempt to delete the given file
 def try_delete(fname):
 	try:
@@ -1182,7 +1192,7 @@ def try_delete(fname):
 	except FileNotFoundError:
 		pass
 	except Exception as err:
-		print("Error deleting file: {0}".format(err))
+		logwarn("Error deleting file: {0}".format(err))
 
 def cleanup_files(files):
 	for f in files:
@@ -1283,6 +1293,14 @@ def print_help():
 	print("\t\tyou will be asked if you want to wait or not.")
 	print()
 
+	print("\t--write-description")
+	print("\t\tWrite the video description to a separate .description file.")
+	print()
+
+	print("\t--write-thumbnail")
+	print("\t\tWrite the thumbnail to a separate file.")
+	print()
+
 	print("Examples:")
 	print("\t{0} -w".format(fname))
 	print("\t{0} -w https://www.youtube.com/watch?v=CnWDmKx9cQQ 1080p60/best".format(fname))
@@ -1313,6 +1331,8 @@ def main():
 	fname_format = "%(title)s-%(id)s"
 	thumbnail = False
 	add_meta = False
+	write_desc = False
+	write_thumb = False
 	verbose = False
 	debug = False
 	inet_family = 0
@@ -1332,6 +1352,8 @@ def main():
 				"add-metadata",
 				"ipv4",
 				"ipv6",
+				"write-description",
+				"write-thumbnail",
 				"cookies=",
 				"retry-stream=",
 				"output=",
@@ -1361,6 +1383,10 @@ def main():
 			debug = True
 		elif o == "--add-metadata":
 			add_meta = True
+		elif o == "--write-description":
+			write_desc = True
+		elif o == "--write-thumbnail":
+			write_thumb = True
 		elif o in ("-4", "--ipv4"):
 			inet_family = socket.AF_INET
 		elif o in ("-6", "--ipv6"):
@@ -1459,12 +1485,30 @@ def main():
 		logerror("Expanded output file path: {0}".format(full_fpath))
 		sys.exit(1)
 
-	info.mdl_info[DTYPE_AUDIO].base_fpath = os.path.join(DTYPE_AUDIO, "{0}.f{1}".format(fname, AUDIO_ITAG))
-	info.mdl_info[DTYPE_VIDEO].base_fpath = os.path.join(DTYPE_VIDEO, "{0}.f{1}".format(fname, info.quality))
+	# Output format included a directory structure. Create it if it doesn't exist
+	if fdir:
+		try:
+			os.makedirs(fdir, exist_ok=True)
+		except Exception as err:
+			logwarn("Error creating final file directory: {0}".format(err))
+			logwarn("The final file will be placed in the current working directory")
+			fdir = ""
+
+	tmpdir = tempfile.TemporaryDirectory(prefix="{0}__".format(info.vid), dir=fdir)
+
+	afile_name = "{0}.f{1}".format(fname, AUDIO_ITAG)
+	vfile_name = "{0}.f{1}".format(fname, info.quality)
+	thmbnl_file_name = "{0}.jpeg".format(fname)
+	desc_file_name = "{0}.description".format(fname)
+
+	info.mdl_info[DTYPE_AUDIO].base_fpath = os.path.join(tmpdir.name, afile_name)
+	info.mdl_info[DTYPE_VIDEO].base_fpath = os.path.join(tmpdir.name, vfile_name)
+
 	afile = info.mdl_info[DTYPE_AUDIO].base_fpath + ".ts"
 	vfile = info.mdl_info[DTYPE_VIDEO].base_fpath + ".ts"
-	thmbnl_file = os.path.join(DTYPE_VIDEO, "{0}.jpeg".format(fname))
-
+	thmbnl_file = os.path.join(tmpdir.name, thmbnl_file_name)
+	desc_file = os.path.join(tmpdir.name, desc_file_name)
+	
 	progress_queue = queue.Queue()
 	total_bytes = 0
 	threads = []
@@ -1474,28 +1518,29 @@ def main():
 	}
 
 	# Grab the thumbnail for the livestream for embedding later
-	if thumbnail and info.thumbnail:
-		thumbnail = download_thumbnail(info.thumbnail, thmbnl_file)
+	if (thumbnail or write_thumb) and info.thumbnail:
+		downloaded = download_thumbnail(info.thumbnail, thmbnl_file)
 
 		# Failed to download but file itself got created. Remove it
-		if not thumbnail and os.path.exists(thmbnl_file):
+		if not downloaded and os.path.exists(thmbnl_file):
 			try_delete(thmbnl_file)
-		else:
-			files.append(thmbnl_file)
+			thumbnail = False
+			write_thumb = False
 
+	if write_desc:
+		with open(desc_file, "w", encoding="utf-8") as f:
+			f.write(info.metadata.get_meta()["comment"])
 	
 	loginfo("Starting download to {0}".format(afile))
 	athread = threading.Thread(target=download_stream, args=(DTYPE_AUDIO, afile, progress_queue, info))
 	threads.append(athread)
 	athread.start()
-	files.append(afile)
 
 	if info.mdl_info[DTYPE_VIDEO].download_url:
 		loginfo("Starting download to {0}".format(vfile))
 		vthread = threading.Thread(target=download_stream, args=(DTYPE_VIDEO, vfile, progress_queue, info))
 		threads.append(vthread)
 		vthread.start()
-		files.append(vfile)
 
 	# Print progress to stdout
 	# Included info is video and audio fragments downloaded, and total data downloaded
@@ -1540,10 +1585,14 @@ def main():
 			if merge:
 				alive = False
 			else:
-				cleanup = get_yes_no("\nWould you like any files that were created to be deleted?")
-				if cleanup:
-					cleanup_files(files)
+				save_files = get_yes_no("\nWould you like to save any created files?")
+				if save_files:
+					try_move(afile, os.path.join(fdir, "{0}.ts".format(afile_name)))
+					try_move(vfile, os.path.join(fdir, "{0}.ts".format(vfile_name)))
+					try_move(thmbnl_file, os.path.join(fdir, thmbnl_file_name))
+					try_move(desc_file, os.path.join(fdir, desc_file_name))
 
+				tmpdir.cleanup()
 				sys.exit(2)
 		
 		if not alive:
@@ -1557,14 +1606,22 @@ def main():
 		logwarn("Mismatched number of video and audio fragments.")
 		logwarn("The files should still be mergable but data might be missing somewhere.")
 
-	# Output format included a directory structure. Create it if it doesn't exist
-	if fdir:
-		try:
-			os.makedirs(fdir, exist_ok=True)
-		except Exception as err:
-			logwarn("Error creating final file directory: {0}".format(err))
-			logwarn("The final file will be placed in the current working directory")
-			fdir = ""
+	new_afile = os.path.join(fdir, "{0}.ts".format(afile_name))
+	new_vfile = os.path.join(fdir, "{0}.ts".format(vfile_name))
+	new_thmbnail = os.path.join(fdir, thmbnl_file_name)
+	new_desc = os.path.join(fdir, desc_file_name)
+
+	try_move(afile, new_afile)
+	try_move(vfile, new_vfile)
+	try_move(thmbnl_file, new_thmbnail)
+	try_move(desc_file, new_desc)
+
+	files.append(new_afile)
+	files.append(new_vfile)
+	if not write_thumb:
+		files.append(new_thmbnail)
+
+	tmpdir.cleanup()
 
 	retcode = 0
 	mfile = ""
@@ -1572,11 +1629,11 @@ def main():
 		"ffmpeg",
 		"-hide_banner",
 		"-loglevel", "warning",
-		"-i", afile
+		"-i", new_afile
 	]
 
 	if thumbnail:
-		ffmpeg_args.extend(["-i", thmbnl_file])
+		ffmpeg_args.extend(["-i", new_thmbnail])
 
 	if aonly:
 		print("Correcting audio container")
@@ -1586,7 +1643,7 @@ def main():
 		mfile = os.path.join(fdir, "{0}.mp4".format(fname))
 
 		ffmpeg_args.extend([
-			"-i", vfile,
+			"-i", new_vfile,
 			"-movflags", "faststart"
 			])
 
@@ -1628,7 +1685,6 @@ def main():
 		sys.exit(retcode)
 
 	cleanup_files(files)
-
 	print()
 	print("Final file: {0}".format(mfile))
 
