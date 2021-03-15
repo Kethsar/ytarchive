@@ -21,38 +21,11 @@ import xml.etree.ElementTree as ET
 	https://github.com/Kethsar/ytarchive
 
 	TODO:
-		Use heartbeat API to continually check if the stream is online still
-		hb_apikey = parsedinfo['innertube_api_key'][0]
-		hbdataobj = {
-			"videoId": vid,
-			"heartbeatRequestParams": {
-				"heartbeatChecks": [
-					"HEARTBEAT_CHECK_TYPE_LIVE_STREAM_STATUS"
-				]
-			},
-			"context": {
-				"client": {
-					"clientName": "WEB",
-					"clientVersion": "" # Grab from ECATCHER service
-				}
-			}
-		}
-
-
-		{
-			"service": "ECATCHER",
-			"params": [
-				{
-					"key": "client.version",
-					"value": "2.20210209"
-				}
-			]
-		}
+		Add --write-description and --write-thumbnail options
 '''
 
 # Constants
 INFO_URL = "https://www.youtube.com/get_video_info?video_id={0}&el=detailpage"
-HEARTBEAT_URL = "https://www.youtube.com/youtubei/v1/player/heartbeat?alt=json&key={0}"
 HTML_VIDEO_LINK_TAG = '<link rel="canonical" href="https://www.youtube.com/watch?v='
 PLAYABLE_OK = "OK"
 PLAYABLE_OFFLINE = "LIVE_STREAM_OFFLINE"
@@ -292,8 +265,8 @@ def download_thumbnail(url, fname):
 	return True
 
 # Get the base player response object for the given video id
-def get_player_response(vid):
-	vinfo = download_as_text(INFO_URL.format(vid))
+def get_player_response(info):
+	vinfo = download_as_text(INFO_URL.format(info.vid))
 
 	if not vinfo or len(vinfo) == 0:
 		logwarn("No video information found, somehow")
@@ -301,6 +274,7 @@ def get_player_response(vid):
 
 	parsedinfo = urllib.parse.parse_qs(vinfo)
 	player_response = json.loads(parsedinfo['player_response'][0])
+
 	return player_response
 
 # Make a comma-separated list of available formats
@@ -357,8 +331,8 @@ def get_yes_no(msg):
 	return yesno.startswith("y")
 
 # Ask if the user wants to wait for a scheduled stream to start and then record it
-def ask_wait_for_stream(url, info):
-	print("{0} is probably a future scheduled livestream.".format(url))
+def ask_wait_for_stream(info):
+	print("{0} is probably a future scheduled livestream.".format(info.url))
 	print("Would you like to wait for the scheduled start time, poll until it starts, or not wait?")
 	choice = input("wait/poll/[no]: ").lower().strip()
 
@@ -383,14 +357,14 @@ def get_playable_player_response(info):
 	player_response = {}
 	secs_late = 0
 	selected_qualities = []
-	vid = info.vid
-	url = info.url
+
+	if info.selected_quality:
+		selected_qualities = parse_quality_list(list(VIDEO_LABEL_ITAGS.keys()), info.selected_quality)
 
 	while retry:
-		player_response = get_player_response(vid)
+		player_response = get_player_response(info)
 		if not player_response:
 			return None
-
 
 		if not 'videoDetails' in player_response:
 			if info.in_progress:
@@ -405,14 +379,11 @@ def get_playable_player_response(info):
 			return None
 
 		if not player_response['videoDetails']['isLiveContent']:
-			print("{0} is not a livestream. It would be better to use youtube-dl to download it.".format(url))
+			print("{0} is not a livestream. It would be better to use youtube-dl to download it.".format(info.url))
 			return None
 
 		playability = player_response['playabilityStatus']
 		playability_status = playability['status']
-
-		if info.selected_quality:
-			selected_qualities = parse_quality_list(list(VIDEO_LABEL_ITAGS.keys()), info.selected_quality)
 
 		if playability_status == PLAYABLE_ERROR:
 			logwarn("Playability status: ERROR. Reason: {0}".format(playability["reason"]))
@@ -447,7 +418,7 @@ def get_playable_player_response(info):
 				return None
 
 			if first_wait and info.wait == WAIT_ASK and info.retry_secs == 0:
-				if not ask_wait_for_stream(url, info):
+				if not ask_wait_for_stream(info):
 					return None
 
 			if first_wait:
@@ -457,6 +428,15 @@ def get_playable_player_response(info):
 
 			if info.retry_secs > 0:
 				if first_wait:
+					try:
+						poll_delay_ms = playability["liveStreamability"]["liveStreamabilityRenderer"]["pollDelayMs"]
+						poll_delay = int(int(poll_delay_ms)/1000)
+
+						if info.retry_secs < poll_delay:
+							info.retry_secs = poll_delay
+					except:
+						pass
+
 					print("Waiting for stream, retrying every {0} seconds...".format(info.retry_secs))
 
 				first_wait = False
@@ -969,7 +949,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 	dthreads = []
 	data = []
 	del_frags = []
-	f = open(dfile, "ab")
+	f = open(dfile, "wb")
 
 	with info.lock:
 		while info.mdl_info[data_type].active_threads < info.thread_count:
@@ -1267,6 +1247,8 @@ def print_help():
 	print("\t-r, --retry-stream SECONDS")
 	print("\t\tIf waiting for a scheduled livestream, re-check if the stream is")
 	print("\t\tup every SECONDS instead of waiting for the initial scheduled time.")
+	print("\t\tIf SECONDS is less than the poll delay youtube gives (typically")
+	print("\t\t15 seconds), then this will be set to the value youtube provides.")
 	print()
 
 	print("\t--threads THREAD_COUNT")
@@ -1466,6 +1448,7 @@ def main():
 		sys.exit(1)
 
 	# Setup file name and directories
+	# TODO: Make tmp dir in the output dir for storing the ts files instead
 	full_fpath = fname_format % info.format_info.get_info()
 	fdir = os.path.dirname(full_fpath)
 	fname = os.path.basename(full_fpath)
