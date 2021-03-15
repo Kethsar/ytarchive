@@ -18,12 +18,16 @@ import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
 
-'''
-	https://github.com/Kethsar/ytarchive
 
-	TODO:
-		Add --write-description and --write-thumbnail options
-'''
+ABOUT = {
+	"name": "ytarchive",
+	"version": "0.2.0",
+	"date": "2021/01/27",
+	"description": "Download youtube livestreams, from the beginning."
+	"author": "Kethsar",
+	"license": "MIT",
+	"url": "https://github.com/Kethsar/ytarchive"
+}
 
 # Constants
 INFO_URL = "https://www.youtube.com/get_video_info?video_id={0}&el=detailpage"
@@ -48,15 +52,15 @@ BUF_SIZE = 8192
 # https://gist.github.com/AgentOak/34d47c65b1d28829bb17c24c04a0096f
 AUDIO_ITAG = 140
 VIDEO_LABEL_ITAGS = {
-	'audio_only': 0, 
-	'144p': {"h264": 160, "vp9": 278},
-	'240p': {"h264": 133, "vp9": 242},
-	'360p': {"h264": 134, "vp9": 243},
-	'480p': {"h264": 135, "vp9": 244},
-	'720p': {"h264": 136, "vp9": 247},
-	'720p60': {"h264": 298, "vp9": 302},
-	'1080p': {"h264": 137, "vp9": 248},
-	'1080p60': {"h264": 299, "vp9": 303},
+	"audio_only": 0, 
+	"144p": {"h264": 160, "vp9": 278},
+	"240p": {"h264": 133, "vp9": 242},
+	"360p": {"h264": 134, "vp9": 243},
+	"480p": {"h264": 135, "vp9": 244},
+	"720p": {"h264": 136, "vp9": 247},
+	"720p60": {"h264": 298, "vp9": 302},
+	"1080p": {"h264": 137, "vp9": 248},
+	"1080p60": {"h264": 299, "vp9": 303},
 }
 
 # Simple class to more easily keep track of what fields are available for
@@ -224,7 +228,7 @@ def execute(args):
 	logdebug("Executing command: {0}".format(" ".join(shlex.quote(x) for x in args)))
 
 	try:
-			retcode = subprocess.run(args, capture_output=True, check=True, encoding='utf-8').returncode
+			retcode = subprocess.run(args, capture_output=True, check=True, encoding="utf-8").returncode
 	except subprocess.CalledProcessError as err:
 			retcode = err.returncode
 			logerror(err.stderr)
@@ -243,7 +247,7 @@ def patch_getaddrinfo(inet_family):
 
 # Download data from the given URL and return it as unicode text
 def download_as_text(url):
-	data = b''
+	data = b""
 
 	try:
 		with urllib.request.urlopen(url, timeout=5) as resp:
@@ -274,7 +278,7 @@ def get_player_response(info):
 		return None
 
 	parsedinfo = urllib.parse.parse_qs(vinfo)
-	player_response = json.loads(parsedinfo['player_response'][0])
+	player_response = json.loads(parsedinfo["player_response"][0])
 
 	return player_response
 
@@ -294,7 +298,7 @@ def parse_quality_list(formats, quality):
 	selected_qualities = []
 	quality = quality.lower().strip()
 
-	selected_quarities = quality.split('/')
+	selected_quarities = quality.split("/")
 	for q in selected_quarities:
 		stripped = q.strip()
 		if stripped in formats or stripped == "best":
@@ -367,7 +371,7 @@ def get_playable_player_response(info):
 		if not player_response:
 			return None
 
-		if not 'videoDetails' in player_response:
+		if not "videoDetails" in player_response:
 			if info.in_progress:
 				logwarn("Video details no longer available mid download.")
 				logwarn("Stream was likely privated after finishing.")
@@ -379,12 +383,12 @@ def get_playable_player_response(info):
 				print("Video Details not found, video is likely private or does not exist.")
 			return None
 
-		if not player_response['videoDetails']['isLiveContent']:
+		if not player_response["videoDetails"]["isLiveContent"]:
 			print("{0} is not a livestream. It would be better to use youtube-dl to download it.".format(info.url))
 			return None
 
-		playability = player_response['playabilityStatus']
-		playability_status = playability['status']
+		playability = player_response["playabilityStatus"]
+		playability_status = playability["status"]
 
 		if playability_status == PLAYABLE_ERROR:
 			logwarn("Playability status: ERROR. Reason: {0}".format(playability["reason"]))
@@ -724,12 +728,12 @@ def get_atoms(data):
 # Remove the sidx atom from a chunk of data
 def remove_sidx(data):
 	atoms = get_atoms(data)
-	if not 'sidx' in atoms:
+	if not "sidx" in atoms:
 		return data
 
-	sidx = atoms['sidx']
-	ofs = sidx['ofs']
-	rlen = sidx['ofs'] + sidx['len']
+	sidx = atoms["sidx"]
+	ofs = sidx["ofs"]
+	rlen = sidx["ofs"] + sidx["len"]
 	new_data = data[:ofs] + data[rlen:]
 
 	return new_data
@@ -821,7 +825,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				with urllib.request.urlopen(url.format(seq), timeout=info.target_duration * 2) as resp:
 					header_seqnum = int(resp.getheader("X-Head-Seqnum", -1))
 
-					with open(fname, 'wb') as frag_file:
+					with open(fname, "wb") as frag_file:
 						# Read response data into a file in BUF_SIZE chunks
 						while True:
 							buf = resp.read(BUF_SIZE)
@@ -1037,7 +1041,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 			try:
 				bytes_written = 0
 
-				with open(d.fname, 'rb') as rf:
+				with open(d.fname, "rb") as rf:
 					# Remvoe sidx atoms from video and audio
 					# Fixes an issue with streams encoded differently than normal
 					buf = rf.read(BUF_SIZE)
@@ -1145,11 +1149,11 @@ def get_video_id(url):
 			# parsed queries are always in a list
 			parsed_query = urllib.parse.parse_qs(parsedurl.query)
 
-			if not 'v' in parsed_query:
+			if not "v" in parsed_query:
 				logerror("Youtube URL missing video ID")
 				return vid
 
-			vid = parsed_query['v'][0]
+			vid = parsed_query["v"][0]
 
 		# Attempt to find the actual video ID of the current or closest scheduled
 		# livestream for a channel
@@ -1168,7 +1172,7 @@ def get_video_id(url):
 			vid = html[startidx:endidx]
 	elif nl == "youtu.be":
 		# path includes the leading slash
-		vid = parsedurl.path.strip('/')
+		vid = parsedurl.path.strip("/")
 	else:
 		print("{0} is not a known valid youtube URL.".format(url))
 
@@ -1474,7 +1478,6 @@ def main():
 		sys.exit(1)
 
 	# Setup file name and directories
-	# TODO: Make tmp dir in the output dir for storing the ts files instead
 	full_fpath = fname_format % info.format_info.get_info()
 	fdir = os.path.dirname(full_fpath)
 	fname = os.path.basename(full_fpath)
