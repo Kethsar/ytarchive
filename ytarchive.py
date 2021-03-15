@@ -23,7 +23,7 @@ ABOUT = {
 	"name": "ytarchive",
 	"version": "0.2.0",
 	"date": "2021/01/27",
-	"description": "Download youtube livestreams, from the beginning."
+	"description": "Download youtube livestreams, from the beginning.",
 	"author": "Kethsar",
 	"license": "MIT",
 	"url": "https://github.com/Kethsar/ytarchive"

@@ -85,6 +85,12 @@ Options:
 		If this option is not used when a scheduled stream is provided,
 		you will be asked if you want to wait or not.
 
+	--write-description
+		Write the video description to a separate .description file.
+
+	--write-thumbnail
+		Write the thumbnail to a separate file.
+
 Examples:
 	ytarchive.py -w
 	ytarchive.py -w https://www.youtube.com/watch?v=CnWDmKx9cQQ 1080p60/best
