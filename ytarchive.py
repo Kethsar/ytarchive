@@ -1461,22 +1461,6 @@ def main():
 	if not get_video_info(info):
 		sys.exit(1)
 
-	try:
-		os.mkdir(DTYPE_AUDIO)
-	except FileExistsError:
-		pass
-	except Exception as err:
-		logerror("Failed to create audio dir: {0}".format(err))
-		sys.exit(1)
-	
-	try:
-		os.mkdir(DTYPE_VIDEO)
-	except FileExistsError:
-		pass
-	except Exception as err:
-		logerror("Failed to create video dir: {0}".format(err))
-		sys.exit(1)
-
 	# Setup file name and directories
 	full_fpath = fname_format % info.format_info.get_info()
 	fdir = os.path.dirname(full_fpath)
@@ -1501,7 +1485,7 @@ def main():
 
 	afile_name = "{0}.f{1}".format(fname, AUDIO_ITAG)
 	vfile_name = "{0}.f{1}".format(fname, info.quality)
-	thmbnl_file_name = "{0}.jpeg".format(fname)
+	thmbnl_file_name = "{0}.jpg".format(fname)
 	desc_file_name = "{0}.description".format(fname)
 
 	info.mdl_info[DTYPE_AUDIO].base_fpath = os.path.join(tmpdir.name, afile_name)
