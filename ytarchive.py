@@ -1656,11 +1656,9 @@ def main():
 
 	ffmpeg = shutil.which("ffmpeg")
 	if not ffmpeg:
-		print("ffmpeg not found. Please install ffmpeg.")
-		pcmd = get_yes_no("Would you like the command to be printed? If you used --add-metadata, this will be huge.")
-
-		if pcmd:
-			print(" ".join(shlex.quote(x) for x in ffmpeg_args))
+		print("***COMMAND THAT WOULD HAVE BEEN RUN***\n")
+		print(" ".join(shlex.quote(x) for x in ffmpeg_args))
+		print("\nffmpeg not found. Please install ffmpeg, then run the above command to create the final file.")
 			
 		sys.exit(0)
 
