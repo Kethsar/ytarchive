@@ -752,7 +752,6 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				break
 
 		tries = 0
-		empty_cnt = 0
 		full_retries = 3
 		seq = -1
 		max_seq = -1
@@ -808,7 +807,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 		fname = "{0}.frag{1}.ts".format(info.mdl_info[data_type].base_fpath, seq)
 
-		while tries < FRAG_MAX_TRIES and empty_cnt < FRAG_MAX_EMPTY:
+		while tries < FRAG_MAX_TRIES:
 			with info.lock:
 				if info.stopping:
 					downloading = False
@@ -834,16 +833,17 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 							bytes_written += frag_file.write(buf)
 
+				# The request was a success but no data was given
+				# Increment the try counter and wait
 				if bytes_written == 0:
-					empty_cnt += 1
-					if empty_cnt < FRAG_MAX_EMPTY:
+					tries += 1
+					if tries < FRAG_MAX_TRIES:
 						time.sleep(info.target_duration)
-					
-					continue
-
-				data_queue.put(Fragment(seq, fname, header_seqnum))
-				is_403 = False
-				break
+						continue
+				else:
+					data_queue.put(Fragment(seq, fname, header_seqnum))
+					is_403 = False
+					break
 			except urllib.error.HTTPError as err:
 				logdebug("{0}: HTTP Error for fragment {1}: {2}".format(tname, seq, err))
 				info.print_status()
@@ -875,7 +875,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				
 				tries += 1
 				if tries < FRAG_MAX_TRIES:
-					time.sleep(2)
+					time.sleep(info.target_duration)
 			except Exception as err:
 				logdebug("{0}: Error with fragment {1}: {2}".format(tname, seq, err))
 				info.print_status()
@@ -891,20 +891,18 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 				tries += 1
 				if tries < FRAG_MAX_TRIES:
-					time.sleep(2)
+					time.sleep(info.target_duration)
 
 			if tries >= FRAG_MAX_TRIES:
 				full_retries -= 1
 				try_delete(fname)
 				info.print_status()
 
-				logdebug("{0}: Fragment {1}: {2}/{3} retries; {4}/{5} empty responses".format(
+				logdebug("{0}: Fragment {1}: {2}/{3} retries".format(
 					tname,
 					seq,
 					tries,
-					FRAG_MAX_TRIES,
-					empty_cnt,
-					FRAG_MAX_EMPTY
+					FRAG_MAX_TRIES
 				))
 				info.print_status()
 
@@ -927,11 +925,6 @@ def download_frags(data_type, info, seq_queue, data_queue):
 						logdebug("{0}: Fragment {1}: Stream still live, continuing download attempt".format(tname, seq))
 						info.print_status()
 						tries = 0
-						empty_cnt = 0
-
-		if empty_cnt >= FRAG_MAX_EMPTY:
-			try_delete(fname)
-			info.print_status()
 
 	logdebug("{0}: exiting".format(tname))
 	info.print_status()
@@ -1342,6 +1335,11 @@ def main():
 	inet_family = 0
 	files = []
 
+	'''
+		TODO:
+		Add merge/nomerge option
+		Add save/nosave option
+	'''
 	try:
 		opts, args = getopt.getopt(sys.argv[1:],
 			"hwntv46c:r:o:",
