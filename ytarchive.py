@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from enum import Enum
 import getopt
 import http.cookiejar
 import json
@@ -41,11 +42,7 @@ DTYPE_AUDIO = "audio"
 DTYPE_VIDEO = "video"
 DEFAULT_VIDEO_QUALITY = "best"
 RECHECK_TIME = 15
-WAIT_ASK = 0
-WAIT = 1
-NO_WAIT = 2
 FRAG_MAX_TRIES = 10
-FRAG_MAX_EMPTY = 10
 HOUR = 60 * 60
 BUF_SIZE = 8192
 
@@ -62,6 +59,11 @@ VIDEO_LABEL_ITAGS = {
 	"1080p": {"h264": 137, "vp9": 248},
 	"1080p60": {"h264": 299, "vp9": 303},
 }
+
+class Action(Enum):
+	ASK = 0
+	DO = 1
+	DO_NOT = 2
 
 # Simple class to more easily keep track of what fields are available for
 # file name formatting
@@ -155,7 +157,7 @@ class DownloadInfo:
 		self.status = ""
 		self.dash_manifest_url = ""
 
-		self.wait = WAIT_ASK
+		self.wait = Action.ASK
 		self.quality = -1
 		self.retry_secs = 0
 		self.thread_count = 1
@@ -418,11 +420,11 @@ def get_playable_player_response(info):
 				logdebug("Livestream status is {0} mid-download".format(PLAYABLE_OFFLINE))
 				return None
 
-			if info.wait == NO_WAIT:
+			if info.wait == Action.DO_NOT:
 				print("Stream appears to be a future scheduled stream, and you opted not to wait.")
 				return None
 
-			if first_wait and info.wait == WAIT_ASK and info.retry_secs == 0:
+			if first_wait and info.wait == Action.ASK and info.retry_secs == 0:
 				if not ask_wait_for_stream(info):
 					return None
 
@@ -815,10 +817,6 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 			bytes_written = 0
 
-			# TODO: If status is offline mid downloads, wait for it to come back
-			# or be properly ended instead of spamming requests. Requires heartbeat
-			# checks be implemented. Also do not bother if we are not within 2
-			# of the known max sequence number, just continue downloading
 			try:
 				header_seqnum = -1
 				with urllib.request.urlopen(url.format(seq), timeout=info.target_duration * 2) as resp:
@@ -1372,9 +1370,9 @@ def main():
 			print_help()
 			sys.exit(0)
 		elif o in ("-w", "--wait"):
-			info.wait = WAIT
+			info.wait = Action.DO
 		elif o in ("-n", "--no-wait"):
-			info.wait = NO_WAIT
+			info.wait = Action.DO_NOT
 		elif o in ("-t", "--thumbnail"):
 			thumbnail = True
 		elif o in ("-v", "--verbose"):
