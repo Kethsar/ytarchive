@@ -45,6 +45,14 @@ Options:
 	--debug
 		Print a lot of extra information.
 
+	--merge
+		Automatically run the ffmpeg command for the downloaded streams
+		when sigint is received. You will be prompted otherwise.
+
+	--no-merge
+		Do not run the ffmpeg command for the downloaded streams
+		when sigint is received. You will be prompted otherwise.
+
 	-n, --no-wait
 		Do not wait for a livestream if it's a future scheduled stream.
 
@@ -57,6 +65,16 @@ Options:
 	-r, --retry-stream SECONDS
 		If waiting for a scheduled livestream, re-check if the stream is
 		up every SECONDS instead of waiting for the initial scheduled time.
+		If SECONDS is less than the poll delay youtube gives (typically
+		15 seconds), then this will be set to the value youtube provides.
+
+	--save
+		Automatically save any downloaded data and files if not having
+		ffmpeg run when sigint is received. You will be prompted otherwise.
+
+	--no-save
+		Do not save any downloaded data and files if not having ffmpeg
+		run when sigint is received. You will be prompted otherwise.
 
 	--threads THREAD_COUNT
 		Set the number of threads to use for downloading audio and video

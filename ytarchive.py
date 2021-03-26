@@ -1238,6 +1238,16 @@ def print_help():
 	print("\t\tPrint a lot of extra information.")
 	print()
 
+	print("\t--merge")
+	print("\t\tAutomatically run the ffmpeg command for the downloaded streams")
+	print("\t\twhen sigint is received. You will be prompted otherwise.")
+	print()
+
+	print("\t--no-merge")
+	print("\t\tDo not run the ffmpeg command for the downloaded streams")
+	print("\t\twhen sigint is received. You will be prompted otherwise.")
+	print()
+
 	print("\t-n, --no-wait")
 	print("\t\tDo not wait for a livestream if it's a future scheduled stream.")
 	print()
@@ -1254,6 +1264,16 @@ def print_help():
 	print("\t\tup every SECONDS instead of waiting for the initial scheduled time.")
 	print("\t\tIf SECONDS is less than the poll delay youtube gives (typically")
 	print("\t\t15 seconds), then this will be set to the value youtube provides.")
+	print()
+
+	print("\t--save")
+	print("\t\tAutomatically save any downloaded data and files if not having")
+	print("\t\tffmpeg run when sigint is received. You will be prompted otherwise.")
+	print()
+
+	print("\t--no-save")
+	print("\t\tDo not save any downloaded data and files if not having ffmpeg")
+	print("\t\trun when sigint is received. You will be prompted otherwise.")
 	print()
 
 	print("\t--threads THREAD_COUNT")
@@ -1331,13 +1351,10 @@ def main():
 	verbose = False
 	debug = False
 	inet_family = 0
+	merge_on_cancel = Action.ASK
+	save_on_cancel = Action.ASK
 	files = []
 
-	'''
-		TODO:
-		Add merge/nomerge option
-		Add save/nosave option
-	'''
 	try:
 		opts, args = getopt.getopt(sys.argv[1:],
 			"hwntv46c:r:o:",
@@ -1354,6 +1371,10 @@ def main():
 				"ipv6",
 				"write-description",
 				"write-thumbnail",
+				"merge",
+				"no-merge",
+				"save",
+				"no-save",
 				"cookies=",
 				"retry-stream=",
 				"output=",
@@ -1373,6 +1394,14 @@ def main():
 			info.wait = Action.DO
 		elif o in ("-n", "--no-wait"):
 			info.wait = Action.DO_NOT
+		elif o == "--merge":
+			merge_on_cancel = Action.DO
+		elif o == "--no-merge":
+			merge_on_cancel = Action.DO_NOT
+		elif o == "--save":
+			save_on_cancel = Action.DO
+		elif o == "--no-save":
+			save_on_cancel = Action.DO_NOT
 		elif o in ("-t", "--thumbnail"):
 			thumbnail = True
 		elif o in ("-v", "--verbose"):
@@ -1395,13 +1424,17 @@ def main():
 			cfile = a
 		elif o in ("-o", "--output"):
 			fname_format = a
-		elif o == "--threads":
-			info.thread_count = abs(int(a))
 		elif o in ("-r", "--retry-stream"):
 			try:
 				info.retry_secs = abs(int(a)) # Just abs it, don't bother dealing with negatives
 			except Exception:
-				logerror("retry-stream must be given a whole number argument. Given {0}".format(a))
+				logerror("--retry-stream must be given a whole number argument. Given {0}".format(a))
+				sys.exit(1)
+		elif o == "--threads":
+			try:
+				info.thread_count = abs(int(a))
+			except Exception:
+				logerror("--threads must be given a whole number argument. Given {0}".format(a))
 				sys.exit(1)
 		else:
 			assert False, "Unhandled option"
@@ -1564,11 +1597,21 @@ def main():
 				t.join()
 
 			print()
-			merge = get_yes_no("\nDownload stopped prematurely. Would you like to merge the currently downloaded data?")
+			merge = False
+			if merge_on_cancel == Action.ASK:
+				merge = get_yes_no("\nDownload stopped prematurely. Would you like to merge the currently downloaded data?")
+			elif merge_on_cancel == Action.DO:
+				merge = True
+
 			if merge:
 				alive = False
 			else:
-				save_files = get_yes_no("\nWould you like to save any created files?")
+				save_files = False
+				if save_on_cancel == Action.ASK:
+					save_files = get_yes_no("\nWould you like to save any created files?")
+				elif save_on_cancel == Action.DO:
+					save_files = True
+
 				if save_files:
 					try_move(afile, os.path.join(fdir, "{0}.ts".format(afile_name)))
 					try_move(vfile, os.path.join(fdir, "{0}.ts".format(vfile_name)))
