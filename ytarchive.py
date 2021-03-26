@@ -22,7 +22,7 @@ import xml.etree.ElementTree as ET
 
 ABOUT = {
 	"name": "ytarchive",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"date": "2021/01/27",
 	"description": "Download youtube livestreams, from the beginning.",
 	"author": "Kethsar",
