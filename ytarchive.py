@@ -133,7 +133,6 @@ class MediaDLInfo:
 		self.download_url = ""
 		self.base_fpath = ""
 		self.data_type = ""
-		self.is_vp9 = False
 
 # Miscellaneous information
 class DownloadInfo:
@@ -149,6 +148,7 @@ class DownloadInfo:
 		self.is_live = False
 		self.vp9 = False
 		self.is_unavailable = False
+		self.gvideo_ddl = False
 
 		self.thumbnail = ""
 		self.vid = ""
@@ -173,6 +173,7 @@ class DownloadInfo:
 	def set_status(self, status):
 		with self.lock:
 			self.status = status
+			self.print_status()
 
 	# For use after logging statements, since they wipe out the current status
 	# with how I have things set up
@@ -562,6 +563,11 @@ def get_download_urls(info, formats):
 # Stores them in info
 def get_video_info(info):
 	with info.lock: # Because I forgot some releases, this is worth the extra indent
+		if info.gvideo_ddl:
+			# We have no idea if we can get the video information.
+			# Don't even bother to avoid complexity. Might change later.
+			return False
+
 		if info.stopping:
 			return False
 
@@ -659,7 +665,6 @@ def get_video_info(info):
 
 					if info.vp9 and video_itag["vp9"] in dl_urls:
 						info.mdl_info[DTYPE_VIDEO].download_url = dl_urls[video_itag["vp9"]]
-						info.mdl_info[DTYPE_VIDEO].is_vp9 = True
 						info.quality = video_itag["vp9"]
 						found = True
 						print("Selected quality: {0} (VP9)".format(q))
@@ -1127,47 +1132,89 @@ def download_stream(data_type, dfile, progress_queue, info):
 	logdebug("{0}-download thread closing".format(data_type))
 	info.print_status()
 
+def get_gvideo_url(info, dtype):
+	while True:
+		url = input("Please enter the {0} url, or nothing to skip: ".format(dtype))
+		if not url:
+			if dtype != DTYPE_AUDIO:
+				return
+			else:
+				print("Audio URL must be given. Video-only downloading is not supported at this time.")
+				continue
+
+		parsedurl = urllib.parse.urlparse(url)
+		parsed_query = urllib.parse.parse_qs(parsedurl.query)
+		itag = int(parsed_query["itag"][0])
+		sq_idx = url.find("&sq=")
+		if dtype == DTYPE_VIDEO:
+			info.quality = itag
+
+		if not "noclen" in parsed_query:
+			print("Given Google Video URL is not for a fragmented stream.")
+		# Lazy matching of URL to data type
+		elif ((dtype == DTYPE_AUDIO and itag == AUDIO_ITAG)
+			or (dtype == DTYPE_VIDEO and itag != AUDIO_ITAG)):
+			info.mdl_info[dtype].download_url = url[:sq_idx] + "&sq={0}"
+			break
+		else:
+			print("URL given does not appear to be appropriate for the data type needed.")
+
 # Find the video ID from the given URL
-def get_video_id(url):
-	parsedurl = urllib.parse.urlparse(url)
+def parse_input_url(info):
+	parsedurl = urllib.parse.urlparse(info.url)
 	nl = parsedurl.netloc.lower()
-	vid = ""
+	lpath = parsedurl.path.lower()
+	parsed_query = urllib.parse.parse_qs(parsedurl.query)
 
 	if nl == "www.youtube.com" or nl == "youtube.com":
-		lpath = parsedurl.path.lower()
-
 		if lpath.startswith("/watch"):
-			# parsed queries are always in a list
-			parsed_query = urllib.parse.parse_qs(parsedurl.query)
-
 			if not "v" in parsed_query:
 				logerror("Youtube URL missing video ID")
-				return vid
+				return
 
-			vid = parsed_query["v"][0]
+			# parsed queries are always in a list
+			info.vid = parsed_query["v"][0]
 
 		# Attempt to find the actual video ID of the current or closest scheduled
 		# livestream for a channel
 		elif lpath.startswith("/channel") and lpath.endswith("live"):
 			# This is fucking awful but it works
-			html = download_as_text(url)
+			html = download_as_text(info.url)
 			if len(html) == 0:
-				return vid
+				return
 
 			startidx = html.find(HTML_VIDEO_LINK_TAG)
 			if startidx < 0:
-				return vid
+				return
 			
 			startidx += len(HTML_VIDEO_LINK_TAG)
 			endidx = html.find('"', startidx)
-			vid = html[startidx:endidx]
+			info.vid = html[startidx:endidx]
 	elif nl == "youtu.be":
 		# path includes the leading slash
-		vid = parsedurl.path.strip("/")
-	else:
-		print("{0} is not a known valid youtube URL.".format(url))
+		info.vid = parsedurl.path.strip("/")
+	elif nl.endswith(".googlevideo.com"):
+		# Special case. Receiving a direct googlevideo URL likely means it will
+		# be the download URL and we cannot retrieve new ones or video information
+		if not "noclen" in parsed_query:
+			print("Given Google Video URL is not for a fragmented stream.")
+			return
+		
+		info.gvideo_ddl = True
+		info.vid = parsed_query["id"][0].rstrip(".1") # googlevideo id param has .1 at the end for some reason
+		info.format_info.get_info()["id"] = info.vid # We cannot retrieve format info as normal. Set ID here
+		itag = int(parsed_query["itag"][0])
+		info.quality = itag
+		sq_idx = info.url.find("&sq=")
 
-	return vid
+		if itag == AUDIO_ITAG:
+			info.mdl_info[DTYPE_AUDIO].download_url = info.url[:sq_idx] + "&sq={0}"
+			get_gvideo_url(info, DTYPE_VIDEO)
+		else: # video url, presumably
+			info.mdl_info[DTYPE_VIDEO].download_url = info.url[:sq_idx] + "&sq={0}"
+			get_gvideo_url(info, DTYPE_AUDIO)
+	else:
+		print("{0} is not a known valid youtube URL.".format(info.url))
 
 # Attempt to move src_file to dst_file
 def try_move(src_file, dst_file):
@@ -1456,9 +1503,9 @@ def main():
 	elif len(args) > 0:
 		info.url = args[0]
 	else:
-		info.url = input("Enter a youtube video URL: ")
+		info.url = input("Enter a youtube livestream URL: ")
 
-	info.vid = get_video_id(info.url)
+	parse_input_url(info)
 	if not info.vid:
 		logerror("Could not find video ID")
 		sys.exit(1)
@@ -1487,12 +1534,14 @@ def main():
 		opener = urllib.request.build_opener(cproc)
 		urllib.request.install_opener(opener)
 
-	if not get_video_info(info):
+	if not info.gvideo_ddl and not get_video_info(info):
 		sys.exit(1)
 
 	# Setup file name and directories
 	full_fpath = fname_format % info.format_info.get_info()
-	fdir = os.path.dirname(full_fpath)
+	# Strip os.path.sep to prevent attempting to save to root in the event
+	# that the formatting info is missing a param used as a top-level dir
+	fdir = os.path.dirname(full_fpath).lstrip(os.path.sep)
 	fname = os.path.basename(full_fpath)
 	fname = sterilize_filename(fname)
 
@@ -1542,8 +1591,11 @@ def main():
 			try_delete(thmbnl_file)
 			thumbnail = False
 			write_thumb = False
+	else:
+		thumbnail = False
+		write_thumb = False
 
-	if write_desc:
+	if write_desc and info.metadata.get_meta()["comment"]:
 		with open(desc_file, "w", encoding="utf-8") as f:
 			f.write(info.metadata.get_meta()["comment"])
 	
@@ -1583,8 +1635,6 @@ def main():
 			
 			status += "Total Downloaded: {0}{1}{2}".format(format_size(total_bytes), " "*5, "\b"*5)
 			info.set_status(status)
-
-			print(status, end="")
 		except queue.Empty:
 			pass
 		except KeyboardInterrupt:
@@ -1686,10 +1736,11 @@ def main():
 
 	if add_meta:
 		for k, v in info.metadata.get_meta().items():
-			ffmpeg_args.extend([
-				"-metadata",
-				"{0}={1}".format(k.upper(), v)
-			])
+			if v:
+				ffmpeg_args.extend([
+					"-metadata",
+					"{0}={1}".format(k.upper(), v)
+				])
 	
 	ffmpeg_args.append(mfile)
 
