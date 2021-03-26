@@ -30,6 +30,10 @@ ABOUT = {
 	"url": "https://github.com/Kethsar/ytarchive"
 }
 
+'''
+	TODO: Add more comments. Lots of code added without comments again.
+'''
+
 # Constants
 INFO_URL = "https://www.youtube.com/get_video_info?video_id={0}&el=detailpage"
 HTML_VIDEO_LINK_TAG = '<link rel="canonical" href="https://www.youtube.com/watch?v='
@@ -1132,6 +1136,30 @@ def download_stream(data_type, dfile, progress_queue, info):
 	logdebug("{0}-download thread closing".format(data_type))
 	info.print_status()
 
+# For use with --video-url and --audio-url params mostly
+def parse_gvideo_url(url, dtype):
+	nurl = ""
+	parsedurl = urllib.parse.urlparse(url)
+	nl = parsedurl.netloc.lower()
+	parsed_query = urllib.parse.parse_qs(parsedurl.query)
+	itag = int(parsed_query["itag"][0])
+	sq_idx = url.find("&sq=")
+
+	if not nl.endswith(".googlevideo.com"):
+		return nurl
+	elif not "noclen" in parsed_query:
+		print("Given Google Video URL is not for a fragmented stream.")
+		return nurl
+	elif dtype == DTYPE_AUDIO and itag != AUDIO_ITAG:
+		print("Given audio URL does not have the audio itag. Make sure you set the correct URL(s)")
+		return nurl
+	elif dtype == DTYPE_VIDEO and itag == AUDIO_ITAG:
+		print("Given video URL has the audio itag set. Make sure you set the correct URL(s)")
+		return nurl
+
+	nurl = url[:sq_idx] + "&sq={0}"
+	return nurl
+
 def get_gvideo_url(info, dtype):
 	while True:
 		url = input("Please enter the {0} url, or nothing to skip: ".format(dtype))
@@ -1204,15 +1232,22 @@ def parse_input_url(info):
 		info.vid = parsed_query["id"][0].rstrip(".1") # googlevideo id param has .1 at the end for some reason
 		info.format_info.get_info()["id"] = info.vid # We cannot retrieve format info as normal. Set ID here
 		itag = int(parsed_query["itag"][0])
-		info.quality = itag
 		sq_idx = info.url.find("&sq=")
 
 		if itag == AUDIO_ITAG:
-			info.mdl_info[DTYPE_AUDIO].download_url = info.url[:sq_idx] + "&sq={0}"
-			get_gvideo_url(info, DTYPE_VIDEO)
+			if not info.mdl_info[DTYPE_AUDIO].download_url:
+				info.mdl_info[DTYPE_AUDIO].download_url = info.url[:sq_idx] + "&sq={0}"
+
+			if not info.mdl_info[DTYPE_VIDEO].download_url and info.quality < 0:
+				get_gvideo_url(info, DTYPE_VIDEO)
 		else: # video url, presumably
-			info.mdl_info[DTYPE_VIDEO].download_url = info.url[:sq_idx] + "&sq={0}"
-			get_gvideo_url(info, DTYPE_AUDIO)
+			if not info.mdl_info[DTYPE_VIDEO].download_url:
+				info.mdl_info[DTYPE_VIDEO].download_url = info.url[:sq_idx] + "&sq={0}"
+
+			if not info.mdl_info[DTYPE_AUDIO].download_url:
+				get_gvideo_url(info, DTYPE_AUDIO)
+
+		info.quality = itag
 	else:
 		print("{0} is not a known valid youtube URL.".format(info.url))
 
@@ -1275,6 +1310,11 @@ def print_help():
 	print("\t\tWrite some basic metadata information to the final file.")
 	print()
 
+	print("\t--audio-url GOOGLEVIDEO_URL")
+	print("\t\tPass in the given url as the audio fragment url. Must be a")
+	print("\t\tGoogle Video url with an itag parameter of 140.")
+	print()
+
 	print("\t-c, --cookies COOKIES_FILE")
 	print("\t\tGive a cookies.txt file that has your youtube cookies. Allows")
 	print("\t\tthe script to access members-only content if you are a member")
@@ -1293,6 +1333,17 @@ def print_help():
 	print("\t--no-merge")
 	print("\t\tDo not run the ffmpeg command for the downloaded streams")
 	print("\t\twhen sigint is received. You will be prompted otherwise.")
+	print()
+
+	print("\t--no-save")
+	print("\t\tDo not save any downloaded data and files if not having ffmpeg")
+	print("\t\trun when sigint is received. You will be prompted otherwise.")
+	print()
+
+	print("\t--no-video")
+	print("\t\tIf a googlevideo url is given or passed with --audio-url, do not")
+	print("\t\tprompt for a video url. If a video url is given with --video-url")
+	print("\t\tthen this is effectively ignored.")
 	print()
 
 	print("\t-n, --no-wait")
@@ -1318,11 +1369,6 @@ def print_help():
 	print("\t\tffmpeg run when sigint is received. You will be prompted otherwise.")
 	print()
 
-	print("\t--no-save")
-	print("\t\tDo not save any downloaded data and files if not having ffmpeg")
-	print("\t\trun when sigint is received. You will be prompted otherwise.")
-	print()
-
 	print("\t--threads THREAD_COUNT")
 	print("\t\tSet the number of threads to use for downloading audio and video")
 	print("\t\tfragments. The total number of threads running will be")
@@ -1342,6 +1388,11 @@ def print_help():
 
 	print("\t-v, --verbose")
 	print("\t\tPrint extra information.")
+	print()
+
+	print("\t--video-url GOOGLEVIDEO_URL")
+	print("\t\tPass in the given url as the video fragment url. Must be a")
+	print("\t\tGoogle Video url with an itag parameter that is not 140.")
 	print()
 
 	print("\t--vp9")
@@ -1422,10 +1473,13 @@ def main():
 				"no-merge",
 				"save",
 				"no-save",
+				"no-video",
 				"cookies=",
 				"retry-stream=",
 				"output=",
-				"threads="
+				"threads=",
+				"video-url=",
+				"audio-url="
 			]
 		)
 	except getopt.GetoptError as err:
@@ -1449,6 +1503,8 @@ def main():
 			save_on_cancel = Action.DO
 		elif o == "--no-save":
 			save_on_cancel = Action.DO_NOT
+		elif o == "--no-video":
+			info.quality = AUDIO_ITAG
 		elif o in ("-t", "--thumbnail"):
 			thumbnail = True
 		elif o in ("-v", "--verbose"):
@@ -1471,6 +1527,20 @@ def main():
 			cfile = a
 		elif o in ("-o", "--output"):
 			fname_format = a
+		elif o == "--video-url":
+			url = parse_gvideo_url(a, DTYPE_VIDEO)
+			if not url:
+				print("Invalid video URL given with --video-url")
+				sys.exit(1)
+			
+			info.mdl_info[DTYPE_VIDEO].download_url = url
+		elif o == "--audio-url":
+			url = parse_gvideo_url(a, DTYPE_AUDIO)
+			if not url:
+				print("Invalid audio URL given with --audio-url")
+				sys.exit(1)
+			
+			info.mdl_info[DTYPE_AUDIO].download_url = url
 		elif o in ("-r", "--retry-stream"):
 			try:
 				info.retry_secs = abs(int(a)) # Just abs it, don't bother dealing with negatives
@@ -1497,13 +1567,19 @@ def main():
 
 	patch_getaddrinfo(inet_family)
 
-	if len(args) > 1:
-		info.url = args[0]
-		info.selected_quality = args[1]
-	elif len(args) > 0:
-		info.url = args[0]
-	else:
-		info.url = input("Enter a youtube livestream URL: ")
+	if info.mdl_info[DTYPE_VIDEO].download_url:
+		info.url = info.mdl_info[DTYPE_VIDEO].download_url
+	elif info.mdl_info[DTYPE_AUDIO].download_url:
+		info.url = info.mdl_info[DTYPE_AUDIO].download_url
+
+	if not info.url:
+		if len(args) > 1:
+			info.url = args[0]
+			info.selected_quality = args[1]
+		elif len(args) > 0:
+			info.url = args[0]
+		else:
+			info.url = input("Enter a youtube livestream URL: ")
 
 	parse_input_url(info)
 	if not info.vid:

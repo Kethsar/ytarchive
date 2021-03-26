@@ -37,6 +37,10 @@ Options:
 	--add-metadata
 		Write some basic metadata information to the final file.
 
+	--audio-url GOOGLEVIDEO_URL
+		Pass in the given url as the audio fragment url. Must be a
+		Google Video url with an itag parameter of 140.
+
 	-c, --cookies COOKIES_FILE
 		Give a cookies.txt file that has your youtube cookies. Allows
 		the script to access members-only content if you are a member
@@ -52,6 +56,15 @@ Options:
 	--no-merge
 		Do not run the ffmpeg command for the downloaded streams
 		when sigint is received. You will be prompted otherwise.
+
+	--no-save
+		Do not save any downloaded data and files if not having ffmpeg
+		run when sigint is received. You will be prompted otherwise.
+
+	--no-video
+		If a googlevideo url is given or passed with --audio-url, do not
+		prompt for a video url. If a video url is given with --video-url
+		then this is effectively ignored.
 
 	-n, --no-wait
 		Do not wait for a livestream if it's a future scheduled stream.
@@ -72,10 +85,6 @@ Options:
 		Automatically save any downloaded data and files if not having
 		ffmpeg run when sigint is received. You will be prompted otherwise.
 
-	--no-save
-		Do not save any downloaded data and files if not having ffmpeg
-		run when sigint is received. You will be prompted otherwise.
-
 	--threads THREAD_COUNT
 		Set the number of threads to use for downloading audio and video
 		fragments. The total number of threads running will be
@@ -93,6 +102,10 @@ Options:
 
 	-v, --verbose
 		Print extra information.
+
+	--video-url GOOGLEVIDEO_URL
+		Pass in the given url as the video fragment url. Must be a
+		Google Video url with an itag parameter that is not 140.
 
 	--vp9
 		If there is a VP9 version of your selected video quality,
