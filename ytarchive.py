@@ -859,18 +859,18 @@ def download_frags(data_type, info, seq_queue, data_queue):
 				if err.code == 403:
 					# Check if a new URL is already waiting for us
 					# Else refresh auth by calling get_video_info again
-					logdebug("{0}: Attempting to retrieve a new download URL".format(tname))
-					info.print_status()
-
 					is_403 = True
 
-					with info.lock:
-						new_url = info.mdl_info[data_type].download_url
+					if not info.gvideo_ddl: # Don't bother if gvideo links were the input
+						logdebug("{0}: Attempting to retrieve a new download URL".format(tname))
+						info.print_status()
+						with info.lock:
+							new_url = info.mdl_info[data_type].download_url
 
-						if new_url != url:
-							url = new_url
-						elif get_video_info(info):
-							url = info.mdl_info[data_type].download_url
+							if new_url != url:
+								url = new_url
+							elif get_video_info(info):
+								url = info.mdl_info[data_type].download_url
 				elif err.code == 404:
 					if max_seq > -1:
 						with info.lock:
@@ -1620,6 +1620,10 @@ def main():
 	fdir = os.path.dirname(full_fpath).lstrip(os.path.sep)
 	fname = os.path.basename(full_fpath)
 	fname = sterilize_filename(fname)
+
+	# ffmpeg was seeing - and trying to use the file name as an arg
+	if fname.startswith("-"):
+		fname = "_" + fname
 
 	if len(fname.strip()) == 0:
 		logerror("Output file name appears to be empty.")
