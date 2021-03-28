@@ -1615,10 +1615,11 @@ def main():
 
 	# Setup file name and directories
 	full_fpath = fname_format % info.format_info.get_info()
+	fdir = os.path.dirname(full_fpath)
 	# Strip os.path.sep to prevent attempting to save to root in the event
 	# that the formatting info is missing a param used as a top-level dir
 	if not fname_format.startswith(os.path.sep):
-		fdir = os.path.dirname(full_fpath).lstrip(os.path.sep)
+		fdir = fdir.lstrip(os.path.sep)
 	fname = os.path.basename(full_fpath)
 	fname = sterilize_filename(fname)
 
