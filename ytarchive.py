@@ -86,12 +86,15 @@ class FormatInfo:
 	def set_info(self, player_response):
 		pmfr = player_response["microformat"]["playerMicroformatRenderer"]
 		vid_details = player_response["videoDetails"]
+		# "uploadDate" is actually when the livestream was created, not when it will start
+		# Grab the actual start date from "startTimestamp"
+		start_date = pmfr["liveBroadcastDetails"]["startTimestamp"].replace("-", "")
 
 		self.finfo["id"] = sterilize_filename(vid_details["videoId"])
 		self.finfo["title"] = sterilize_filename(vid_details["title"])
 		self.finfo["channel_id"] = sterilize_filename(vid_details["channelId"])
 		self.finfo["channel"] = sterilize_filename(vid_details["author"])
-		self.finfo["upload_date"] = sterilize_filename(pmfr["uploadDate"].replace("-", ""))
+		self.finfo["upload_date"] = sterilize_filename(start_date[:8])
 
 # Info to be sent through the progress queue
 class ProgressInfo:
@@ -123,10 +126,11 @@ class MetaInfo:
 		pmfr = player_response["microformat"]["playerMicroformatRenderer"]
 		vid_details = player_response["videoDetails"]
 		url = "https://www.youtube.com/watch?v={0}".format(vid_details["videoId"])
+		start_date = pmfr["liveBroadcastDetails"]["startTimestamp"].replace("-", "")
 
 		self.meta["title"] = vid_details["title"]
 		self.meta["artist"] = vid_details["author"]
-		self.meta["date"] = pmfr["uploadDate"].replace("-", "")
+		self.meta["date"] = start_date[:8]
 		# MP4 doesn't allow for a url metadata field
 		# Just put it at the top of the description
 		self.meta["comment"] = "{0}\n\n{1}".format(url, vid_details["shortDescription"])
@@ -1434,7 +1438,7 @@ def print_help():
 	print("\ttitle (string): Video title")
 	print("\tchannel_id (string): ID of the channel")
 	print("\tchannel (string): Full name of the channel the livestream is on")
-	print("\tupload_date (string): Technically stream date (YYYYMMDD)")
+	print("\tupload_date (string): Technically stream date, UTC timezone (YYYYMMDD)")
 
 def main():
 	info = DownloadInfo()
