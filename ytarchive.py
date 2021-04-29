@@ -1954,6 +1954,12 @@ def main():
 					"{0}={1}".format(k.upper(), v)
 				])
 	
+	mfile_name, mfile_ext = mfile.rsplit('.', 1)
+	mfile_ctr = 0
+	while os.path.exists(mfile):
+		mfile_ctr += 1
+		mfile = "{}-{}.{}".format(mfile_name, mfile_ctr, mfile_ext)
+
 	ffmpeg_args.append(mfile)
 
 	ffmpeg = shutil.which("ffmpeg")
