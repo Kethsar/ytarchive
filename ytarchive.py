@@ -193,30 +193,21 @@ class DownloadInfo:
 		with self.lock:
 			print(self.status, end="")
 
-# Logging functions
-def get_clearing_space(msg):
-	term_cols = shutil.get_terminal_size().columns
-	space = term_cols - len(msg)
-	if space < 0:
-		space = 0
-
-	return space
+# Logging functions;
+# ansi sgr 0=reset, 1=bold, while 3x sets the foreground color:
+#   0black 1red 2green 3yellow 4blue 5magenta 6cyan 7white
 
 def logerror(msg):
-	space = get_clearing_space(msg)
-	logging.error("{0}{1}{2}".format(msg, " "*space, "\b"*space))
+	logging.error("\033[31m{0}\033[0m\033[K".format(msg))
 
 def logwarn(msg):
-	space = get_clearing_space(msg)
-	logging.warning("{0}{1}{2}".format(msg, " "*space, "\b"*space))
+	logging.warning("\033[33m{0}\033[0m\033[K".format(msg))
 
 def loginfo(msg):
-	space = get_clearing_space(msg)
-	logging.info("{0}{1}{2}".format(msg, " "*space, "\b"*space))
+	logging.info("\033[32m{0}\033[0m\033[K".format(msg))
 
 def logdebug(msg):
-	space = get_clearing_space(msg)
-	logging.debug("{0}{1}{2}".format(msg, " "*space, "\b"*space))
+	logging.debug("\033[36m{0}\033[0m\033[K".format(msg))
 
 if WINDOWS:
 	import ctypes
@@ -1575,6 +1566,7 @@ def print_help():
 	print("\tupload_date (string): Technically stream date, UTC timezone (YYYYMMDD)")
 
 def main():
+	os.system("")  # enable vt100 on win10 >= 1607
 	info = DownloadInfo()
 	opts = None
 	args = None
