@@ -190,29 +190,17 @@ class DownloadInfo:
 			print(self.status, end="")
 
 # Logging functions
-def get_clearing_space(msg):
-	term_cols = shutil.get_terminal_size().columns
-	space = term_cols - len(msg)
-	if space < 0:
-		space = 0
-
-	return space
-
 def logerror(msg):
-	space = get_clearing_space(msg)
-	logging.error("{0}{1}{2}".format(msg, " "*space, "\b"*space))
+	logging.error("{0}\033[K".format(msg))
 
 def logwarn(msg):
-	space = get_clearing_space(msg)
-	logging.warning("{0}{1}{2}".format(msg, " "*space, "\b"*space))
+	logging.warning("{0}\033[K".format(msg))
 
 def loginfo(msg):
-	space = get_clearing_space(msg)
-	logging.info("{0}{1}{2}".format(msg, " "*space, "\b"*space))
+	logging.info("{0}\033[K".format(msg))
 
 def logdebug(msg):
-	space = get_clearing_space(msg)
-	logging.debug("{0}{1}{2}".format(msg, " "*space, "\b"*space))
+	logging.debug("{0}\033[K".format(msg))
 
 # Remove any illegal filename chars
 # Not robust, but the combination of video title and id should prevent other illegal combinations
@@ -1441,6 +1429,7 @@ def print_help():
 	print("\tupload_date (string): Technically stream date, UTC timezone (YYYYMMDD)")
 
 def main():
+	os.system("")  # enable vt100 on win10 >= 1607
 	info = DownloadInfo()
 	opts = None
 	args = None
