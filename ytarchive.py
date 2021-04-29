@@ -189,18 +189,21 @@ class DownloadInfo:
 		with self.lock:
 			print(self.status, end="")
 
-# Logging functions
+# Logging functions;
+# ansi sgr 0=reset, 1=bold, while 3x sets the foreground color:
+#   0black 1red 2green 3yellow 4blue 5magenta 6cyan 7white
+
 def logerror(msg):
-	logging.error("{0}\033[K".format(msg))
+	logging.error("\033[31m{0}\033[0m\033[K".format(msg))
 
 def logwarn(msg):
-	logging.warning("{0}\033[K".format(msg))
+	logging.warning("\033[33m{0}\033[0m\033[K".format(msg))
 
 def loginfo(msg):
-	logging.info("{0}\033[K".format(msg))
+	logging.info("\033[32m{0}\033[0m\033[K".format(msg))
 
 def logdebug(msg):
-	logging.debug("{0}\033[K".format(msg))
+	logging.debug("\033[36m{0}\033[0m\033[K".format(msg))
 
 # Remove any illegal filename chars
 # Not robust, but the combination of video title and id should prevent other illegal combinations
