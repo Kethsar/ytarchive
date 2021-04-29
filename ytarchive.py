@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 from enum import Enum
+import faulthandler
 import getopt
 import http.cookiejar
 import json
 import logging
 import os
+import platform
 import queue
 import shlex
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -49,6 +52,7 @@ RECHECK_TIME = 15
 FRAG_MAX_TRIES = 10
 HOUR = 60 * 60
 BUF_SIZE = 8192
+WINDOWS = sys.platform in ["win32", "msys"]
 
 # https://gist.github.com/AgentOak/34d47c65b1d28829bb17c24c04a0096f
 AUDIO_ITAG = 140
@@ -213,6 +217,134 @@ def loginfo(msg):
 def logdebug(msg):
 	space = get_clearing_space(msg)
 	logging.debug("{0}{1}{2}".format(msg, " "*space, "\b"*space))
+
+if WINDOWS:
+	import ctypes
+	from ctypes.wintypes import HANDLE, BOOL, DWORD, LPWSTR, LPVOID
+	from ctypes import windll, WinError, get_last_error
+
+	OpenProcess = ctypes.windll.kernel32.OpenProcess
+	OpenProcess.argtypes = (DWORD, BOOL, DWORD)
+	OpenProcess.restype = HANDLE
+
+	MiniDumpWriteDump = ctypes.windll.DbgHelp.MiniDumpWriteDump
+	MiniDumpWriteDump.argtypes = (HANDLE, DWORD, HANDLE, DWORD, DWORD, DWORD, DWORD)
+	MiniDumpWriteDump.restype = BOOL
+
+	CreateFile = ctypes.windll.kernel32.CreateFileW
+	CreateFile.argtypes = (LPWSTR, DWORD, DWORD, LPVOID, DWORD, DWORD, HANDLE)
+	CreateFile.restype = ctypes.wintypes.HANDLE
+
+	FILE_CREATE_ALWAYS = 2
+	FILE_GENERIC_RW = 0xc0000000
+	FILE_ATTRIBUTE_NORMAL = 0x80
+	PROCESS_ALL_ACCESS = 0x1f0fff
+	COREDUMP_MODE = 2  # 0=normal 2=fullMemory
+
+	def winfug(msg):
+		raise Exception('{} ({})'.format(msg, WinError(get_last_error())))
+
+	def windump(fn):
+		pid = os.getpid()
+
+		hproc = OpenProcess(PROCESS_ALL_ACCESS, False, pid)
+		if not hproc:
+			winfug('could not openprocess')
+
+		hfile = CreateFile(fn, FILE_GENERIC_RW, 0, None, FILE_CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, None)
+		if not hfile:
+			winfug('could not createfile')
+
+		res = MiniDumpWriteDump(hproc, pid, hfile, COREDUMP_MODE, 0, 0, 0)
+		if not res:
+			winfug('could not writedump')
+
+		logwarn('wrote coredump to [{}]'.format(fn))
+
+class DoOrDie(object):
+	def __init__(self):
+		self.q = queue.Queue(64)
+		self.deadline = None
+		self.active_task = None
+
+		self.worker_thr = threading.Thread(target=self._worker, daemon=True)
+		self.worker_thr.start()
+
+		t = threading.Thread(target=self._watchdog, daemon=True)
+		t.start()
+
+	def do(self, timeout, fun, *args, **kwargs):
+		ret = queue.Queue()
+		self.q.put([timeout, fun, args, kwargs, ret])
+		
+		ok, ret = ret.get()
+		if ok:
+			return ret
+
+		raise ret
+
+	def shutdown(self):
+		self.q.put(None)
+		self.worker_thr.join()
+		self.worker_thr = None
+
+	def _worker(self):
+		while True:
+			task = self.q.get()
+			if task is None:
+				break
+
+			timeout, fun, args, kwargs, ret_q = task
+
+			self.active_task = task
+			self.deadline = time.time() + timeout
+			try:
+				ret = self._exec(fun, args, kwargs)
+				ret_q.put([True, ret])
+			except Exception as ex:
+				logwarn("dod-ex: {!r}\n  {!r}\n".format(task[:-1], ex), end="")
+				ret_q.put([False, ex])
+
+			self.deadline = None
+
+	def _exec(self, fun, args, kwargs):
+		x = ["dod-exec: " + repr([fun, args, kwargs])]
+		ret = fun(*args, **kwargs)
+		del x[0]
+
+	def _watchdog(self):
+		while self.worker_thr:
+			time.sleep(1)
+			if not self.deadline:
+				continue
+
+			if time.time() >= self.deadline:
+				logerror("dod-time: {!r}".format(self.active_task[:-1]))
+				self._dump()
+				sys.exit(1)
+
+	def _dump(self):
+		ts = time.time()
+		fn = "coredump-{:.3f}.txt".format(ts)
+		with open(fn, "w") as f:
+			f.write("\n".join([str(x) for x in [
+				platform.python_implementation(),
+				sys.version_info,
+				platform.system(),
+				sys.platform,
+				platform.python_compiler(),
+				platform.version(),
+				time.time(),
+				self.deadline,
+				repr(self.active_task)
+			]]) + "\n\n")
+			faulthandler.dump_traceback(file=f)
+
+		if WINDOWS:
+			fn = "coredump-{:.3f}.dmp".format(ts)
+			cw = windump(fn)
+		else:
+			os.kill(os.getpid(), signal.SIGABRT)
 
 # Remove any illegal filename chars
 # Not robust, but the combination of video title and id should prevent other illegal combinations
@@ -948,6 +1080,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 def download_stream(data_type, dfile, progress_queue, info):
 	data_queue = queue.Queue()
 	seq_queue = queue.Queue()
+	dod = DoOrDie()
 	cur_frag = 0
 	cur_seq = 0
 	active_downloads = 0
@@ -1063,7 +1196,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 				progress_queue.put(ProgressInfo(data_type, bytes_written, max_seqs))
 
 				try:
-					os.remove(d.fname)
+					dod.do(10, os.remove, d.fname)
 				except Exception as err:
 					logwarn("{0}-download: Error deleting fragment {1}: {2}".format(data_type, d.seq, err))
 					logwarn("{0}-download: Will try again after the download has finished".format(data_type))
@@ -1135,10 +1268,11 @@ def download_stream(data_type, dfile, progress_queue, info):
 	if len(del_frags) > 0:
 		loginfo("{0}-download: Attempting to delete fragments that failed to be deleted before".format(data_type))
 		for d in del_frags:
-			try_delete(d)
+			dod.do(10, try_delete, d)
 
 	logdebug("{0}-download thread closing".format(data_type))
 	info.print_status()
+	dod.shutdown()
 
 # For use with --video-url and --audio-url params mostly
 def parse_gvideo_url(url, dtype):
