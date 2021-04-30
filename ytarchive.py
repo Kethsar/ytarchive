@@ -268,7 +268,7 @@ class DoOrDie(object):
 		retq = queue.Queue()
 		self.q.put([timeout, fun, args, kwargs, retq])
 		
-		ok, ret = ret.get()
+		ok, ret = retq.get()
 		if ok:
 			return ret
 
