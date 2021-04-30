@@ -293,7 +293,7 @@ class DoOrDie(object):
 				ret = self._exec(fun, args, kwargs)
 				ret_q.put([True, ret])
 			except Exception as ex:
-				logwarn("dod-ex: {!r}\n  {!r}\n".format(task[:-1], ex), end="")
+				logwarn("dod-ex: {!r}\n  {!r}\n".format(task[:-1], ex))
 				ret_q.put([False, ex])
 
 			self.deadline = None
@@ -317,7 +317,7 @@ class DoOrDie(object):
 	def _dump(self):
 		ts = time.time()
 		fn = "coredump-{:.3f}.txt".format(ts)
-		with open(fn, "w") as f:
+		with open(fn, "w", encoding="utf-8") as f:
 			f.write("\n".join([str(x) for x in [
 				platform.python_implementation(),
 				sys.version_info,
