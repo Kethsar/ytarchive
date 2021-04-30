@@ -265,8 +265,8 @@ class DoOrDie(object):
 		t.start()
 
 	def do(self, timeout, fun, *args, **kwargs):
-		ret = queue.Queue()
-		self.q.put([timeout, fun, args, kwargs, ret])
+		retq = queue.Queue()
+		self.q.put([timeout, fun, args, kwargs, retq])
 		
 		ok, ret = ret.get()
 		if ok:
