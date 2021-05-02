@@ -140,5 +140,5 @@ FORMAT OPTIONS
 	title (string): Video title
 	channel_id (string): ID of the channel
 	channel (string): Full name of the channel the livestream is on
-	upload_date (string): Technically stream date (YYYYMMDD)
+	upload_date (string): Technically stream date, UTC timezone (YYYYMMDD)
 ```

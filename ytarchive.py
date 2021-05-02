@@ -1406,164 +1406,138 @@ def cleanup_files(files):
 
 def print_help():
 	fname = os.path.basename(sys.argv[0])
+	qlist = make_quality_list(VIDEO_LABEL_ITAGS)
 
-	print()
-	print("usage: {0} [OPTIONS] [url] [quality]".format(fname))
-	print()
+	print(f"""
+usage: {fname} [OPTIONS] [url] [quality]
 
-	print("\t[url] is a youtube livestream URL. If not provided, you will be")
-	print("\tprompted to enter one.")
-	print()
+	[url] is a youtube livestream URL. If not provided, you will be
+	prompted to enter one.
 
-	print("\t[quality] is a slash-delimited list of video qualities you want")
-	print("\tto be selected for download, from most to least wanted. If not")
-	print("\tprovided, you will be prompted for one, with a list of available")
-	print("\tqualities to choose from. The following values are valid:")
-	print("\t{0}".format(make_quality_list(VIDEO_LABEL_ITAGS)))
-	print()
+	[quality] is a slash-delimited list of video qualities you want
+	to be selected for download, from most to least wanted. If not
+	provided, you will be prompted for one, with a list of available
+	qualities to choose from. The following values are valid:
+	{qlist}
 
-	print("Options:")
-	print("\t-h, --help")
-	print("\t\tShow this help message.")
-	print()
+Options:
+	-h, --help
+		Show this help message.
 
-	print("\t-4, --ipv4")
-	print("\t\tMake all connections using IPv4.")
-	print()
+	-4, --ipv4
+		Make all connections using IPv4.
 
-	print("\t-6, --ipv6")
-	print("\t\tMake all connections using IPv6.")
-	print()
+	-6, --ipv6
+		Make all connections using IPv6.
 
-	print("\t--add-metadata")
-	print("\t\tWrite some basic metadata information to the final file.")
-	print()
+	--add-metadata
+		Write some basic metadata information to the final file.
 
-	print("\t--audio-url GOOGLEVIDEO_URL")
-	print("\t\tPass in the given url as the audio fragment url. Must be a")
-	print("\t\tGoogle Video url with an itag parameter of 140.")
-	print()
+	--audio-url GOOGLEVIDEO_URL
+		Pass in the given url as the audio fragment url. Must be a
+		Google Video url with an itag parameter of 140.
 
-	print("\t-c, --cookies COOKIES_FILE")
-	print("\t\tGive a cookies.txt file that has your youtube cookies. Allows")
-	print("\t\tthe script to access members-only content if you are a member")
-	print("\t\tfor the given stream's user. Must be netscape cookie format.")
-	print()
+	-c, --cookies COOKIES_FILE
+		Give a cookies.txt file that has your youtube cookies. Allows
+		the script to access members-only content if you are a member
+		for the given stream's user. Must be netscape cookie format.
 
-	print("\t--debug")
-	print("\t\tPrint a lot of extra information.")
-	print()
+	--debug
+		Print a lot of extra information.
 
-	print("\t--merge")
-	print("\t\tAutomatically run the ffmpeg command for the downloaded streams")
-	print("\t\twhen sigint is received. You will be prompted otherwise.")
-	print()
+	--merge
+		Automatically run the ffmpeg command for the downloaded streams
+		when sigint is received. You will be prompted otherwise.
 
-	print("\t--no-merge")
-	print("\t\tDo not run the ffmpeg command for the downloaded streams")
-	print("\t\twhen sigint is received. You will be prompted otherwise.")
-	print()
+	--no-merge
+		Do not run the ffmpeg command for the downloaded streams
+		when sigint is received. You will be prompted otherwise.
 
-	print("\t--no-save")
-	print("\t\tDo not save any downloaded data and files if not having ffmpeg")
-	print("\t\trun when sigint is received. You will be prompted otherwise.")
-	print()
+	--no-save
+		Do not save any downloaded data and files if not having ffmpeg
+		run when sigint is received. You will be prompted otherwise.
 
-	print("\t--no-video")
-	print("\t\tIf a googlevideo url is given or passed with --audio-url, do not")
-	print("\t\tprompt for a video url. If a video url is given with --video-url")
-	print("\t\tthen this is effectively ignored.")
-	print()
+	--no-video
+		If a googlevideo url is given or passed with --audio-url, do not
+		prompt for a video url. If a video url is given with --video-url
+		then this is effectively ignored.
 
-	print("\t-n, --no-wait")
-	print("\t\tDo not wait for a livestream if it's a future scheduled stream.")
-	print()
+	-n, --no-wait
+		Do not wait for a livestream if it's a future scheduled stream.
 
-	print("\t-o, --output FILENAME_FORMAT")
-	print("\t\tSet the output file name EXCLUDING THE EXTENSION. Can include")
-	print("\t\tformatting similar to youtube-dl, albeit much more limited.")
-	print("\t\tSee FORMAT OPTIONS below for a list of available format keys.")
-	print("\t\tDefault is '%(title)s-%(id)s'")
-	print()
+	-o, --output FILENAME_FORMAT
+		Set the output file name EXCLUDING THE EXTENSION. Can include
+		formatting similar to youtube-dl, albeit much more limited.
+		See FORMAT OPTIONS below for a list of available format keys.
+		Default is '%(title)s-%(id)s'
 
-	print("\t-r, --retry-stream SECONDS")
-	print("\t\tIf waiting for a scheduled livestream, re-check if the stream is")
-	print("\t\tup every SECONDS instead of waiting for the initial scheduled time.")
-	print("\t\tIf SECONDS is less than the poll delay youtube gives (typically")
-	print("\t\t15 seconds), then this will be set to the value youtube provides.")
-	print()
+	-r, --retry-stream SECONDS
+		If waiting for a scheduled livestream, re-check if the stream is
+		up every SECONDS instead of waiting for the initial scheduled time.
+		If SECONDS is less than the poll delay youtube gives (typically
+		15 seconds), then this will be set to the value youtube provides.
 
-	print("\t--save")
-	print("\t\tAutomatically save any downloaded data and files if not having")
-	print("\t\tffmpeg run when sigint is received. You will be prompted otherwise.")
-	print()
+	--save
+		Automatically save any downloaded data and files if not having
+		ffmpeg run when sigint is received. You will be prompted otherwise.
 
-	print("\t--threads THREAD_COUNT")
-	print("\t\tSet the number of threads to use for downloading audio and video")
-	print("\t\tfragments. The total number of threads running will be")
-	print("\t\tTHREAD_COUNT * 2 + 3. Main thread, a thread for each audio and")
-	print("\t\tvideo download, and THREAD_COUNT number of fragment downloaders")
-	print("\t\tfor both audio and video. The nature of Python means this script")
-	print("\t\twill never use more than a single CPU core no matter how many")
-	print("\t\tthreads are started. Setting this above 5 is not recommended.")
-	print("\t\tDefault is 1.")
-	print()
+	--threads THREAD_COUNT
+		Set the number of threads to use for downloading audio and video
+		fragments. The total number of threads running will be
+		THREAD_COUNT * 2 + 3. Main thread, a thread for each audio and
+		video download, and THREAD_COUNT number of fragment downloaders
+		for both audio and video. The nature of Python means this script
+		will never use more than a single CPU core no matter how many
+		threads are started. Setting this above 5 is not recommended.
+		Default is 1.
 
-	print("\t-t, --thumbnail")
-	print("\t\tDownload and embed the stream thumbnail in the finished file.")
-	print("\t\tWhether the thumbnail shows properly depends on your file browser.")
-	print("\t\tWindows' seems to work. Nemo on Linux seemingly does not.")
-	print()
+	-t, --thumbnail
+		Download and embed the stream thumbnail in the finished file.
+		Whether the thumbnail shows properly depends on your file browser.
+		Windows' seems to work. Nemo on Linux seemingly does not.
 
-	print("\t-v, --verbose")
-	print("\t\tPrint extra information.")
-	print()
+	-v, --verbose
+		Print extra information.
 
-	print("\t--video-url GOOGLEVIDEO_URL")
-	print("\t\tPass in the given url as the video fragment url. Must be a")
-	print("\t\tGoogle Video url with an itag parameter that is not 140.")
-	print()
+	--video-url GOOGLEVIDEO_URL
+		Pass in the given url as the video fragment url. Must be a
+		Google Video url with an itag parameter that is not 140.
 
-	print("\t--vp9")
-	print("\t\tIf there is a VP9 version of your selected video quality,")
-	print("\t\tdownload that instead of the usual h264.")
-	print()
+	--vp9
+		If there is a VP9 version of your selected video quality,
+		download that instead of the usual h264.
 
-	print("\t-w, --wait")
-	print("\t\tWait for a livestream if it's a future scheduled stream.")
-	print("\t\tIf this option is not used when a scheduled stream is provided,")
-	print("\t\tyou will be asked if you want to wait or not.")
-	print()
+	-w, --wait
+		Wait for a livestream if it's a future scheduled stream.
+		If this option is not used when a scheduled stream is provided,
+		you will be asked if you want to wait or not.
 
-	print("\t--write-description")
-	print("\t\tWrite the video description to a separate .description file.")
-	print()
+	--write-description
+		Write the video description to a separate .description file.
 
-	print("\t--write-thumbnail")
-	print("\t\tWrite the thumbnail to a separate file.")
-	print()
+	--write-thumbnail
+		Write the thumbnail to a separate file.
 
-	print("Examples:")
-	print("\t{0} -w".format(fname))
-	print("\t{0} -w https://www.youtube.com/watch?v=CnWDmKx9cQQ 1080p60/best".format(fname))
-	print("\t{0} --threads 3 https://www.youtube.com/watch?v=ZK1GXnz-1Lw best".format(fname))
-	print("\t{0} --wait -r 30 https://www.youtube.com/channel/UCZlDXzGoo7d44bwdNObFacg/live best".format(fname))
-	print("\t{0} -c cookies-youtube-com.txt https://www.youtube.com/watch?v=_touw1GND-M best".format(fname))
-	print("\t{0} --no-wait --add-metadata https://www.youtube.com/channel/UCvaTdHTWBGv3MKj3KVqJVCw/live best".format(fname))
-	print("\t{0} -o '%(channel)s/%(upload_date)s_%(title)s' https://www.youtube.com/watch?v=HxV9UAMN12o best".format(fname))
-	print()
-	print()
+Examples:
+	{fname} -w
+	{fname} -w https://www.youtube.com/watch?v=CnWDmKx9cQQ 1080p60/best
+	{fname} --threads 3 https://www.youtube.com/watch?v=ZK1GXnz-1Lw best
+	{fname} --wait -r 30 https://www.youtube.com/channel/UCZlDXzGoo7d44bwdNObFacg/live best
+	{fname} -c cookies-youtube-com.txt https://www.youtube.com/watch?v=_touw1GND-M best
+	{fname} --no-wait --add-metadata https://www.youtube.com/channel/UCvaTdHTWBGv3MKj3KVqJVCw/live best
+	{fname} -o '%(channel)s/%(upload_date)s_%(title)s' https://www.youtube.com/watch?v=HxV9UAMN12o best
 
-	print("FORMAT OPTIONS")
-	print("\tFormat keys provided are made to be the same as they would be for")
-	print("\tyoutube-dl. See https://github.com/ytdl-org/youtube-dl#output-template")
-	print()
-	
-	print("\tid (string): Video identifier")
-	print("\ttitle (string): Video title")
-	print("\tchannel_id (string): ID of the channel")
-	print("\tchannel (string): Full name of the channel the livestream is on")
-	print("\tupload_date (string): Technically stream date, UTC timezone (YYYYMMDD)")
+
+FORMAT OPTIONS
+	Format keys provided are made to be the same as they would be for
+	youtube-dl. See https://github.com/ytdl-org/youtube-dl#output-template
+
+	id (string): Video identifier
+	title (string): Video title
+	channel_id (string): ID of the channel
+	channel (string): Full name of the channel the livestream is on
+	upload_date (string): Technically stream date, UTC timezone (YYYYMMDD)
+""")
 
 def main():
 	os.system("")  # enable vt100 on win10 >= 1607
