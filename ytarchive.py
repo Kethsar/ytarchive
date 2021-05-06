@@ -3,6 +3,7 @@ from enum import Enum
 import faulthandler
 import getopt
 import http.cookiejar
+import io
 import json
 import logging
 import os
@@ -107,12 +108,13 @@ class ProgressInfo:
 		self.bytes = byte_count
 		self.max_seq = max_seq
 
-# Fragment data
+# Fragment information/data
 class Fragment:
-	def __init__(self, seq, fname, header_seqnum):
+	def __init__(self, seq, header_seqnum, fname, data):
 		self.seq = seq
 		self.fname = fname
 		self.x_head_seqnum = header_seqnum
+		self.data = data
 
 # Metadata for the final file
 class MetaInfo:
@@ -877,7 +879,7 @@ def remove_sidx(data):
 	return new_data
 
 # Download a fragment and send it back via data_queue
-def download_frags(data_type, info, seq_queue, data_queue):
+def download_frags(data_type, info, seq_queue, data_queue, frag_files):
 	downloading = True
 	frag_tries = 0
 	url = info.mdl_info[data_type].download_url
@@ -955,17 +957,27 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 			try:
 				header_seqnum = -1
+				data = io.BytesIO()
+
 				with urllib.request.urlopen(url.format(seq), timeout=info.target_duration * 2) as resp:
 					header_seqnum = int(resp.getheader("X-Head-Seqnum", -1))
 
-					with open(fname, "wb") as frag_file:
-						# Read response data into a file in BUF_SIZE chunks
+					if frag_files:
+						with open(fname, "wb") as frag_file:
+							# Read response data into a file in BUF_SIZE chunks
+							while True:
+								buf = resp.read(BUF_SIZE)
+								if len(buf) == 0:
+									break
+
+								bytes_written += frag_file.write(buf)
+					else:
 						while True:
 							buf = resp.read(BUF_SIZE)
 							if len(buf) == 0:
 								break
 
-							bytes_written += frag_file.write(buf)
+							bytes_written += data.write(buf)
 
 				# The request was a success but no data was given
 				# Increment the try counter and wait
@@ -975,7 +987,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 						time.sleep(info.target_duration)
 						continue
 				else:
-					data_queue.put(Fragment(seq, fname, header_seqnum))
+					data_queue.put(Fragment(seq, header_seqnum, fname, data))
 					is_403 = False
 					break
 			except urllib.error.HTTPError as err:
@@ -1068,7 +1080,7 @@ def download_frags(data_type, info, seq_queue, data_queue):
 
 # Download the given data_type stream to dfile
 # Sends progress info through progress_queue
-def download_stream(data_type, dfile, progress_queue, info):
+def download_stream(data_type, dfile, progress_queue, info, frag_files):
 	data_queue = queue.Queue()
 	seq_queue = queue.Queue()
 	cur_frag = 0
@@ -1086,7 +1098,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 	with info.lock:
 		while info.mdl_info[data_type].active_threads < info.thread_count:
 			t = threading.Thread(target=download_frags,
-				args=(data_type, info, seq_queue, data_queue),
+				args=(data_type, info, seq_queue, data_queue, frag_files),
 				name="{0}{1}".format(data_type, tnum))
 
 			dthreads.append(t)
@@ -1167,8 +1179,18 @@ def download_stream(data_type, dfile, progress_queue, info):
 
 			try:
 				bytes_written = 0
+				rf = None
 
-				with open(d.fname, "rb") as rf:
+				if frag_files:
+					rf = open(d.fname, "rb")
+				else:
+					rf = d.data
+
+				with rf:
+					# If we are using a BytesIO object, our pointer is probably
+					# at the end. Seek to the beginning.
+					rf.seek(0)
+
 					# Remvoe sidx atoms from video and audio
 					# Fixes an issue with streams encoded differently than normal
 					buf = rf.read(BUF_SIZE)
@@ -1185,13 +1207,14 @@ def download_stream(data_type, dfile, progress_queue, info):
 				cur_frag += 1
 				progress_queue.put(ProgressInfo(data_type, bytes_written, max_seqs))
 
-				try:
-					os.remove(d.fname)
-				except Exception as err:
-					logwarn("{0}-download: Error deleting fragment {1}: {2}".format(data_type, d.seq, err))
-					logwarn("{0}-download: Will try again after the download has finished".format(data_type))
-					del_frags.append(d.fname)
-					info.print_status()
+				if frag_files:
+					try:
+						os.remove(d.fname)
+					except Exception as err:
+						logwarn("{0}-download: Error deleting fragment {1}: {2}".format(data_type, d.seq, err))
+						logwarn("{0}-download: Will try again after the download has finished".format(data_type))
+						del_frags.append(d.fname)
+						info.print_status()
 
 				data.remove(d)
 				tries = 10
@@ -1217,7 +1240,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 
 					while info.mdl_info[data_type].active_threads < info.thread_count:
 						t = threading.Thread(target=download_frags,
-							args=(data_type, info, seq_queue, data_queue),
+							args=(data_type, info, seq_queue, data_queue, frag_files),
 							name="{0}{1}".format(data_type, tnum))
 
 						dthreads.append(t)
@@ -1262,7 +1285,6 @@ def download_stream(data_type, dfile, progress_queue, info):
 
 	logdebug("{0}-download thread closing".format(data_type))
 	info.print_status()
-	dod.shutdown()
 
 # For use with --video-url and --audio-url params mostly
 def parse_gvideo_url(url, dtype):
@@ -1448,6 +1470,16 @@ Options:
 		Automatically run the ffmpeg command for the downloaded streams
 		when sigint is received. You will be prompted otherwise.
 
+	--no-frag-files
+		Keep fragment data in memory instead of writing to an intermediate file.
+		This has the possibility to drastically increase RAM usage if a fragment
+		downloads particularly slowly as more fragments after it finish first.
+		This is only an issue when --threads >1
+
+		This will hopefully solve an odd edge case where os.remove() was locking
+		up on Windows 10 without throwing an exception, effectively deadlocking
+		the download.
+
 	--no-merge
 		Do not run the ffmpeg command for the downloaded streams
 		when sigint is received. You will be prompted otherwise.
@@ -1485,10 +1517,11 @@ Options:
 		fragments. The total number of threads running will be
 		THREAD_COUNT * 2 + 3. Main thread, a thread for each audio and
 		video download, and THREAD_COUNT number of fragment downloaders
-		for both audio and video. The nature of Python means this script
-		will never use more than a single CPU core no matter how many
-		threads are started. Setting this above 5 is not recommended.
-		Default is 1.
+		for both audio and video.
+		
+		The nature of Python means this script will never use more than a single
+		core worth of CPU, no matter how many threads are started. Setting this
+		above 5 is not recommended. Default is 1.
 
 	-t, --thumbnail
 		Download and embed the stream thumbnail in the finished file.
@@ -1551,6 +1584,7 @@ def main():
 	write_thumb = False
 	verbose = False
 	debug = False
+	frag_files = True
 	inet_family = 0
 	merge_on_cancel = Action.ASK
 	save_on_cancel = Action.ASK
@@ -1577,6 +1611,7 @@ def main():
 				"save",
 				"no-save",
 				"no-video",
+				"no-frag-files",
 				"cookies=",
 				"retry-stream=",
 				"output=",
@@ -1608,6 +1643,8 @@ def main():
 			save_on_cancel = Action.DO_NOT
 		elif o == "--no-video":
 			info.quality = AUDIO_ITAG
+		elif o == "--no-frag-files":
+			frag_files = False
 		elif o in ("-t", "--thumbnail"):
 			thumbnail = True
 		elif o in ("-v", "--verbose"):
@@ -1785,13 +1822,17 @@ def main():
 			f.write(info.metadata.get_meta()["comment"])
 	
 	loginfo("Starting download to {0}".format(afile))
-	athread = threading.Thread(target=download_stream, args=(DTYPE_AUDIO, afile, progress_queue, info))
+	athread = threading.Thread(target=download_stream,
+		args=(DTYPE_AUDIO, afile, progress_queue, info, frag_files))
+
 	threads.append(athread)
 	athread.start()
 
 	if info.mdl_info[DTYPE_VIDEO].download_url:
 		loginfo("Starting download to {0}".format(vfile))
-		vthread = threading.Thread(target=download_stream, args=(DTYPE_VIDEO, vfile, progress_queue, info))
+		vthread = threading.Thread(target=download_stream,
+			args=(DTYPE_VIDEO, vfile, progress_queue, info, frag_files))
+
 		threads.append(vthread)
 		vthread.start()
 

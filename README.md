@@ -53,6 +53,16 @@ Options:
 		Automatically run the ffmpeg command for the downloaded streams
 		when sigint is received. You will be prompted otherwise.
 
+	--no-frag-files
+		Keep fragment data in memory instead of writing to an intermediate file.
+		This has the possibility to drastically increase RAM usage if a fragment
+		downloads particularly slowly as more fragments after it finish first.
+		This is only an issue when --threads >1
+
+		This will hopefully solve an odd edge case where os.remove() was locking
+		up on Windows 10 without throwing an exception, effectively deadlocking
+		the download.
+
 	--no-merge
 		Do not run the ffmpeg command for the downloaded streams
 		when sigint is received. You will be prompted otherwise.
@@ -90,10 +100,11 @@ Options:
 		fragments. The total number of threads running will be
 		THREAD_COUNT * 2 + 3. Main thread, a thread for each audio and
 		video download, and THREAD_COUNT number of fragment downloaders
-		for both audio and video. The nature of Python means this script
-		will never use more than a single CPU core no matter how many
-		threads are started. Setting this above 5 is not recommended.
-		Default is 1.
+		for both audio and video.
+		
+		The nature of Python means this script will never use more than a single
+		core worth of CPU, no matter how many threads are started. Setting this
+		above 5 is not recommended. Default is 1.
 
 	-t, --thumbnail
 		Download and embed the stream thumbnail in the finished file.
