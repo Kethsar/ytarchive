@@ -1071,7 +1071,6 @@ def download_frags(data_type, info, seq_queue, data_queue):
 def download_stream(data_type, dfile, progress_queue, info):
 	data_queue = queue.Queue()
 	seq_queue = queue.Queue()
-	dod = DoOrDie()
 	cur_frag = 0
 	cur_seq = 0
 	active_downloads = 0
@@ -1187,7 +1186,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 				progress_queue.put(ProgressInfo(data_type, bytes_written, max_seqs))
 
 				try:
-					dod.do(10, os.remove, d.fname)
+					os.remove(d.fname)
 				except Exception as err:
 					logwarn("{0}-download: Error deleting fragment {1}: {2}".format(data_type, d.seq, err))
 					logwarn("{0}-download: Will try again after the download has finished".format(data_type))
@@ -1259,7 +1258,7 @@ def download_stream(data_type, dfile, progress_queue, info):
 	if len(del_frags) > 0:
 		loginfo("{0}-download: Attempting to delete fragments that failed to be deleted before".format(data_type))
 		for d in del_frags:
-			dod.do(10, try_delete, d)
+			try_delete(d)
 
 	logdebug("{0}-download thread closing".format(data_type))
 	info.print_status()
