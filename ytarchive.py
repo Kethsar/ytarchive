@@ -86,9 +86,6 @@ class FormatInfo:
         "upload_date": ""
     }
 
-    def get_info(self):
-        return self.finfo
-
     def set_info(self, player_response):
         pmfr = player_response["microformat"]["playerMicroformatRenderer"]
         vid_details = player_response["videoDetails"]
@@ -129,8 +126,6 @@ class MetaInfo:
         "comment": ""
     }
 
-    def get_meta(self):
-        return self.meta
 
     def set_meta(self, player_response):
         pmfr = player_response["microformat"]["playerMicroformatRenderer"]
@@ -1542,7 +1537,7 @@ def parse_input_url(info):
 
         info.gvideo_ddl = True
         info.vid = parsed_query["id"][0].rstrip(".1")  # googlevideo id param has .1 at the end for some reason
-        info.format_info.get_info()["id"] = info.vid  # We cannot retrieve format info as normal. Set ID here
+        info.format_info.finfo["id"] = info.vid  # We cannot retrieve format info as normal. Set ID here
         itag = int(parsed_query["itag"][0])
         sq_idx = info.url.find("&sq=")
 
@@ -1904,7 +1899,7 @@ def main():
 
     # Test filename format to make sure a valid one was given
     try:
-        fname_format % info.format_info.get_info()
+        fname_format % info.format_info.finfo
     except KeyError as err:
         logerror("Unknown output format key: {0}".format(err))
         sys.exit(1)
@@ -1930,7 +1925,7 @@ def main():
         sys.exit(1)
 
     # Setup file name and directories
-    full_fpath = fname_format % info.format_info.get_info()
+    full_fpath = fname_format % info.format_info.finfo
     fdir = os.path.dirname(full_fpath)
     # Strip os.path.sep to prevent attempting to save to root in the event
     # that the formatting info is missing a param used as a top-level dir
@@ -1993,9 +1988,9 @@ def main():
         thumbnail = False
         write_thumb = False
 
-    if write_desc and info.metadata.get_meta()["comment"]:
+    if write_desc and info.metadata.meta["comment"]:
         with open(desc_file, "w", encoding="utf-8") as f:
-            f.write(info.metadata.get_meta()["comment"])
+            f.write(info.metadata.meta["comment"])
 
     loginfo("Starting download to {0}".format(afile))
     athread = threading.Thread(target=download_stream,
@@ -2138,7 +2133,7 @@ def main():
         ffmpeg_args.extend(["-disposition:v:0", "attached_pic"])
 
     if add_meta:
-        for k, v in info.metadata.get_meta().items():
+        for k, v in info.metadata.meta.items():
             if v:
                 ffmpeg_args.extend([
                     "-metadata",
