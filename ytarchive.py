@@ -195,15 +195,17 @@ class DownloadInfo:
             self.status = status
             self.print_status()
 
-    # For use after logging statements, since they wipe out the current status
-    # with how I have things set up
     def print_status(self):
+        """
+            For use after logging statements, since they wipe out the current status
+            with how I have things set up
+        """
         with self.lock:
             print(self.status, end="")
 
 
-# Logging functions;
-# ansi sgr 0=reset, 1=bold, while 3x sets the foreground color:
+#   Logging functions;
+#   ansi sgr 0=reset, 1=bold, while 3x sets the foreground color:
 #   0black 1red 2green 3yellow 4blue 5magenta 6cyan 7white
 
 def logerror(msg):
@@ -354,17 +356,24 @@ class DoOrDie(object):
             os.kill(os.getpid(), signal.SIGABRT)
 
 
-# Remove any illegal filename chars
-# Not robust, but the combination of video title and id should prevent other illegal combinations
 def sterilize_filename(fname):
+    """
+    Remove any illegal filename chars
+    Not robust, but the combination of video title and id should prevent other illegal combinations
+
+    :param fname:
+    """
     for c in BAD_CHARS:
         fname = fname.replace(c, "_")
 
     return fname
 
 
-# Pretty formatting of byte count
 def format_size(bsize):
+    """
+    Pretty formatting of byte count
+    :param bsize:
+    """
     postfixes = ["bytes", "KiB", "MiB", "GiB"]  # don't even bother with terabytes
     i = 0
     while bsize > 1024:
@@ -374,9 +383,13 @@ def format_size(bsize):
     return "{0:.2f}{1}".format(bsize, postfixes[i])
 
 
-# Execute an external process using the given args
-# Returns the process return code, or -1 on unknown error
 def execute(args):
+    """
+    Execute an external process using the given args
+    Returns the process return code, or -1 on unknown error
+
+    :param args:
+    """
     retcode = 0
     logdebug("Executing command: {0}".format(" ".join(shlex.quote(x) for x in args)))
 
@@ -392,8 +405,12 @@ def execute(args):
     return retcode
 
 
-# Patch socket.getaddrinfo() to allow forcing IPv4 or IPv6
 def patch_getaddrinfo(inet_family):
+    """
+    Patch socket.getaddrinfo() to allow forcing IPv4 or IPv6
+
+    :param inet_family:
+    """
     orig_getaddrinfo = socket.getaddrinfo
 
     def new_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
@@ -402,8 +419,11 @@ def patch_getaddrinfo(inet_family):
     socket.getaddrinfo = new_getaddrinfo
 
 
-# Download data from the given URL and return it as unicode text
 def download_as_text(url):
+    """
+    Download data from the given URL and return it as unicode text
+    :param url:
+    """
     data = b""
 
     try:
@@ -428,8 +448,12 @@ def download_thumbnail(url, fname):
     return True
 
 
-# Get the base player response object for the given video id
 def get_player_response(info):
+    """
+    Get the base player response object for the given video id
+
+    :param info:
+    """
     vinfo = download_as_text(INFO_URL.format(info.vid))
 
     if not vinfo or len(vinfo) == 0:
@@ -442,8 +466,12 @@ def get_player_response(info):
     return player_response
 
 
-# Make a comma-separated list of available formats
 def make_quality_list(formats):
+    """
+    Make a comma-separated list of available formats
+
+    :param formats:
+    """
     qualities = ""
     quarity = ""
 
@@ -454,8 +482,13 @@ def make_quality_list(formats):
     return qualities
 
 
-# Parse the user-given list of qualities they are willing to accept for download
 def parse_quality_list(formats, quality):
+    """
+    Parse the user-given list of qualities they are willing to accept for download
+
+    :param formats:
+    :param quality:
+    """
     selected_qualities = []
     quality = quality.lower().strip()
 
@@ -471,8 +504,13 @@ def parse_quality_list(formats, quality):
     return selected_qualities
 
 
-# Prompt the user to select a video quality
 def get_quality_from_user(formats, waiting=False):
+    """
+    Prompt the user to select a video quality
+
+    :param formats:
+    :param waiting:
+    """
     if waiting:
         print("Since you are going to wait for the stream, you must pre-emptively select a video quality.")
         print(
@@ -500,8 +538,12 @@ def get_yes_no(msg):
     return yesno.startswith("y")
 
 
-# Ask if the user wants to wait for a scheduled stream to start and then record it
 def ask_wait_for_stream(info):
+    """
+    Ask if the user wants to wait for a scheduled stream to start and then record it
+
+    :param info:
+    """
     print("{0} is probably a future scheduled livestream.".format(info.url))
     print("Would you like to wait for the scheduled start time, poll until it starts, or not wait?")
     choice = better_input("wait/poll/[no]: ").lower().strip()
@@ -521,8 +563,11 @@ def ask_wait_for_stream(info):
     return False
 
 
-# Keep retrieving the player response object until the playability status is OK
 def get_playable_player_response(info):
+    """
+    Keep retrieving the player response object until the playability status is OK
+    :param info:
+    """
     first_wait = True
     retry = True
     player_response = {}
@@ -682,8 +727,12 @@ def is_fragmented(url):
     return url.lower().find("noclen") >= 0
 
 
-# Parse the DASH manifest XML and get the download URLs from it
 def get_urls_from_manifest(manifest):
+    """
+    Parse the DASH manifest XML and get the download URLs from it
+    :param manifest:
+    :return:
+    """
     urls = {}
 
     try:
@@ -707,9 +756,14 @@ def get_urls_from_manifest(manifest):
     return urls
 
 
-# Get download URLs either from the DASH manifest or from the adaptiveFormats
-# Prioritize DASH manifest if it is available
 def get_download_urls(info, formats):
+    """
+    Get download URLs either from the DASH manifest or from the adaptiveFormats
+    Prioritize DASH manifest if it is available
+
+    :param info:
+    :param formats:
+    """
     urls = {}
 
     if info.dash_manifest_url:
@@ -728,9 +782,14 @@ def get_download_urls(info, formats):
     return urls
 
 
-# Get necessary video info such as video/audio URLs
-# Stores them in info
+
 def get_video_info(info):
+    """
+    Get necessary video info such as video/audio URLs
+    Stores them in info
+
+    :param info:
+    """
     with info.lock:  # Because I forgot some releases, this is worth the extra indent
         if info.gvideo_ddl:
             # We have no idea if we can get the video information.
@@ -878,9 +937,13 @@ def get_video_info(info):
     return True
 
 
-# Get the name of top-level atoms along with their offset and length
-# In our case, data should be the first 5kb - 8kb of a fragment
 def get_atoms(data):
+    """
+    Get the name of top-level atoms along with their offset and length
+    In our case, data should be the first 5kb - 8kb of a fragment
+
+    :param data:
+    """
     atoms = {}
     ofs = 0
 
@@ -903,8 +966,12 @@ def get_atoms(data):
     return atoms
 
 
-# Remove the sidx atom from a chunk of data
 def remove_sidx(data):
+    """
+    Remove the sidx atom from a chunk of data
+
+    :param data:
+    """
     atoms = get_atoms(data)
     if not "sidx" in atoms:
         return data
@@ -917,8 +984,16 @@ def remove_sidx(data):
     return new_data
 
 
-# Download a fragment and send it back via data_queue
 def download_frags(data_type, info, seq_queue, data_queue, frag_files):
+    """
+    Download a fragment and send it back via data_queue
+
+    :param data_type:
+    :param info:
+    :param seq_queue:
+    :param data_queue:
+    :param frag_files:
+    """
     downloading = True
     frag_tries = 0
     url = info.mdl_info[data_type].download_url
@@ -1127,9 +1202,17 @@ def download_frags(data_type, info, seq_queue, data_queue, frag_files):
         info.mdl_info[data_type].active_threads -= 1
 
 
-# Download the given data_type stream to dfile
-# Sends progress info through progress_queue
 def download_stream(data_type, dfile, progress_queue, info, frag_files):
+    """
+    Download the given data_type stream to dfile
+    Sends progress info through progress_queue
+
+    :param data_type:
+    :param dfile:
+    :param progress_queue:
+    :param info:
+    :param frag_files:
+    """
     data_queue = queue.Queue()
     seq_queue = queue.Queue()
     cur_frag = 0
@@ -1340,8 +1423,13 @@ def download_stream(data_type, dfile, progress_queue, info, frag_files):
     info.print_status()
 
 
-# For use with --video-url and --audio-url params mostly
 def parse_gvideo_url(url, dtype):
+    """
+    For use with --video-url and --audio-url params mostly
+
+    :param url:
+    :param dtype:
+    """
     nurl = ""
     parsedurl = urllib.parse.urlparse(url)
     nl = parsedurl.netloc.lower()
@@ -1396,6 +1484,7 @@ def get_gvideo_url(info, dtype):
 def better_input(query: str) -> str:
     """
 	simple function to manage whitespaces and KeyboardInterrupt events during input() calls
+
     :param query: input() value
     :return: str
     """
@@ -1407,8 +1496,12 @@ def better_input(query: str) -> str:
         exit(1)
 
 
-# Find the video ID from the given URL
 def parse_input_url(info):
+    """
+    Find the video ID from the given URL
+
+    :param info:
+    """
     parsedurl = urllib.parse.urlparse(info.url)
     nl = parsedurl.netloc.lower()
     lpath = parsedurl.path.lower()
@@ -1471,8 +1564,13 @@ def parse_input_url(info):
         print("{0} is not a known valid youtube URL.".format(info.url))
 
 
-# Attempt to move src_file to dst_file
 def try_move(src_file, dst_file):
+    """
+    Attempt to move src_file to dst_file
+
+    :param src_file:
+    :param dst_file:
+    """
     try:
         if os.path.exists(src_file):
             loginfo("Moving file {0} to {1}".format(src_file, dst_file))
@@ -1481,8 +1579,12 @@ def try_move(src_file, dst_file):
         logwarn("Error moving file: {0}".format(err))
 
 
-# Attempt to delete the given file
 def try_delete(fname):
+    """
+    Attempt to delete the given file
+
+    :param fname:
+    """
     try:
         if os.path.exists(fname):
             loginfo("Deleting file {0}".format(fname))
