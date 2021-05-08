@@ -227,7 +227,7 @@ def logdebug(msg):
 if WINDOWS:
     import ctypes
     from ctypes.wintypes import HANDLE, BOOL, DWORD, LPWSTR, LPVOID
-    from ctypes import windll, WinError, get_last_error
+    from ctypes import WinError, get_last_error
 
     OpenProcess = ctypes.windll.kernel32.OpenProcess
     OpenProcess.argtypes = (DWORD, BOOL, DWORD)
