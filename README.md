@@ -59,10 +59,6 @@ Options:
 		downloads particularly slowly as more fragments after it finish first.
 		This is only an issue when --threads >1
 
-		This will hopefully solve an odd edge case where os.remove() was locking
-		up on Windows 10 without throwing an exception, effectively deadlocking
-		the download.
-
 	--no-merge
 		Do not run the ffmpeg command for the downloaded streams
 		when sigint is received. You will be prompted otherwise.
