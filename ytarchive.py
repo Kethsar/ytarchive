@@ -2098,7 +2098,7 @@ def main():
     ffmpeg_args = [
         "ffmpeg",
         "-hide_banner",
-        "-loglevel", "warning",
+        "-loglevel", "error",
         "-stats",
         "-i", new_afile
     ]
