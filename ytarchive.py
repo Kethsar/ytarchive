@@ -387,12 +387,12 @@ def execute(args):
     """
     retcode = 0
     logdebug("Executing command: {0}".format(" ".join(shlex.quote(x) for x in args)))
+    print()
 
     try:
-        retcode = subprocess.run(args, capture_output=True, check=True, encoding="utf-8").returncode
+        subprocess.run(args, check=True, encoding="utf-8")
     except subprocess.CalledProcessError as err:
         retcode = err.returncode
-        logerror(err.stderr)
     except Exception as err:
         logerror(err)
         retcode = -1
@@ -2099,6 +2099,7 @@ def main():
         "ffmpeg",
         "-hide_banner",
         "-loglevel", "warning",
+        "-stats",
         "-i", new_afile
     ]
 
