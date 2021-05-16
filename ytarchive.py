@@ -2,6 +2,7 @@
 from enum import Enum
 import faulthandler
 import getopt
+from html.parser import HTMLParser
 import http.cookiejar
 import io
 import json
@@ -39,7 +40,9 @@ ABOUT = {
 
 # Constants
 INFO_URL = "https://www.youtube.com/get_video_info?video_id={0}&el=detailpage"
+WATCH_URL = "https://www.youtube.com/watch?v={0}"
 HTML_VIDEO_LINK_TAG = '<link rel="canonical" href="https://www.youtube.com/watch?v='
+INITIAL_PLAYER_RESPONSE_DECL = "var ytInitialPlayerResponse ="
 PLAYABLE_OK = "OK"
 PLAYABLE_OFFLINE = "LIVE_STREAM_OFFLINE"
 PLAYABLE_UNPLAYABLE = "UNPLAYABLE"
@@ -197,6 +200,24 @@ class DownloadInfo:
         """
         with self.lock:
             print(self.status, end="")
+
+
+# Fallback to get the player response object from the watch page HTML itself
+class WatchPageParser(HTMLParser):
+    player_response_text = ""
+
+    def handle_data(self, data):
+        """
+            Check tag data for INITIAL_PLAYER_RESPONSE_DECL at the start.
+            Thankfully the script tag containing its declaration contains ONLY
+            that. Strip the var declaration from the front and the trailing
+            semicolon, and that's our player_response JSON text.
+        """
+        if not data.startswith(INITIAL_PLAYER_RESPONSE_DECL):
+            return
+
+        obj_start = data.find("{")
+        self.player_response_text = data[obj_start:].strip(";")
 
 
 #   Logging functions;
@@ -450,13 +471,29 @@ def get_player_response(info):
     :param info:
     """
     vinfo = download_as_text(INFO_URL.format(info.vid))
+    parsedinfo = None
+    player_response = None
 
     if not vinfo or len(vinfo) == 0:
-        logwarn("No video information found, somehow")
-        return None
+        logwarn("get_video_info failed to return data.")
+        logwarn("Attempting to get data from watch page.")
 
-    parsedinfo = urllib.parse.parse_qs(vinfo)
-    player_response = json.loads(parsedinfo["player_response"][0])
+        watch_html = download_as_text(WATCH_URL.format(info.vid))
+        if len(watch_html) == 0:
+            logwarn("Watch page did not return any data. What?")
+            return None
+
+        watch_parser = WatchPageParser()
+        watch_parser.feed(watch_html)
+
+        if len(watch_parser.player_response_text) == 0:
+            logwarn("Player response not found in the watch page.")
+            return None
+
+        player_response = json.loads(watch_parser.player_response_text)
+    else:
+        parsedinfo = urllib.parse.parse_qs(vinfo)
+        player_response = json.loads(parsedinfo["player_response"][0])
 
     return player_response
 
