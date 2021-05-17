@@ -217,7 +217,10 @@ class WatchPageParser(HTMLParser):
             return
 
         obj_start = data.find("{")
-        self.player_response_text = data[obj_start:].strip(";")
+        obj_end = data.find("};", obj_start) + 1
+
+        if obj_end > obj_start:
+            self.player_response_text = data[obj_start:obj_end]
 
 
 #   Logging functions;
