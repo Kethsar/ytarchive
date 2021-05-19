@@ -39,7 +39,7 @@ ABOUT = {
 '''
 
 # Constants
-INFO_URL = "https://www.youtube.com/get_video_info?video_id={0}&el=detailpage"
+INFO_URL = "https://www.youtube.com/get_video_info?video_id={0}&el=detailpage&html5=1"
 WATCH_URL = "https://www.youtube.com/watch?v={0}"
 HTML_VIDEO_LINK_TAG = '<link rel="canonical" href="https://www.youtube.com/watch?v='
 INITIAL_PLAYER_RESPONSE_DECL = "var ytInitialPlayerResponse ="
@@ -209,9 +209,9 @@ class WatchPageParser(HTMLParser):
     def handle_data(self, data):
         """
             Check tag data for INITIAL_PLAYER_RESPONSE_DECL at the start.
-            Thankfully the script tag containing its declaration contains ONLY
-            that. Strip the var declaration from the front and the trailing
-            semicolon, and that's our player_response JSON text.
+            Turns out members videos have more than just the player_response
+            object delcaration. Should probably do a find instead of startswith
+            for the variable declaration as well, but whatever.
         """
         if not data.startswith(INITIAL_PLAYER_RESPONSE_DECL):
             return
