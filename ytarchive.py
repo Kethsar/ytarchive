@@ -1752,6 +1752,11 @@ Options:
 
     --write-description
         Write the video description to a separate .description file.
+    
+    --write-mux-file
+        Write the ffmpeg command that would mux audio and video or put audio
+        into an mp4 container instead of running the command automatically.
+        Useful if you want to tweak the command, want a higher log level, etc.
 
     --write-thumbnail
         Write the thumbnail to a separate file.
@@ -1789,6 +1794,7 @@ def main():
     add_meta = False
     write_desc = False
     write_thumb = False
+    write_mux = False
     verbose = False
     debug = False
     frag_files = True
@@ -1799,34 +1805,35 @@ def main():
 
     try:
         opts, args = getopt.getopt(sys.argv[1:],
-                                   "hwntv46c:r:o:",
-                                   [
-                                       "help",
-                                       "wait",
-                                       "no-wait",
-                                       "thumbnail",
-                                       "verbose",
-                                       "debug",
-                                       "vp9",
-                                       "add-metadata",
-                                       "ipv4",
-                                       "ipv6",
-                                       "write-description",
-                                       "write-thumbnail",
-                                       "merge",
-                                       "no-merge",
-                                       "save",
-                                       "no-save",
-                                       "no-video",
-                                       "no-frag-files",
-                                       "cookies=",
-                                       "retry-stream=",
-                                       "output=",
-                                       "threads=",
-                                       "video-url=",
-                                       "audio-url="
-                                   ]
-                                   )
+            "hwntv46c:r:o:",
+            [
+                "help",
+                "wait",
+                "no-wait",
+                "thumbnail",
+                "verbose",
+                "debug",
+                "vp9",
+                "add-metadata",
+                "ipv4",
+                "ipv6",
+                "write-description",
+                "write-thumbnail",
+                "write-mux-file",
+                "merge",
+                "no-merge",
+                "save",
+                "no-save",
+                "no-video",
+                "no-frag-files",
+                "cookies=",
+                "retry-stream=",
+                "output=",
+                "threads=",
+                "video-url=",
+                "audio-url="
+            ]
+        )
     except getopt.GetoptError as err:
         logerror("{0}".format(err))
         print_help()
@@ -1866,6 +1873,8 @@ def main():
             write_desc = True
         elif o == "--write-thumbnail":
             write_thumb = True
+        elif o == "--write-mux-file":
+            write_mux = True
         elif o in ("-4", "--ipv4"):
             inet_family = socket.AF_INET
         elif o in ("-6", "--ipv6"):
@@ -1994,6 +2003,7 @@ def main():
     vfile_name = "{0}.f{1}".format(fname, info.quality)
     thmbnl_file_name = "{0}.jpg".format(fname)
     desc_file_name = "{0}.description".format(fname)
+    mux_file_name = "{0}.ffmpeg_command.txt".format(fname)
 
     info.mdl_info[DTYPE_AUDIO].base_fpath = os.path.join(tmpdir.name, afile_name)
     info.mdl_info[DTYPE_VIDEO].base_fpath = os.path.join(tmpdir.name, vfile_name)
@@ -2120,6 +2130,7 @@ def main():
     new_vfile = os.path.join(fdir, "{0}.ts".format(vfile_name))
     new_thmbnail = os.path.join(fdir, thmbnl_file_name)
     new_desc = os.path.join(fdir, desc_file_name)
+    mux_file = os.path.join(fdir, mux_file_name)
 
     try_move(afile, new_afile)
     try_move(vfile, new_vfile)
@@ -2138,7 +2149,7 @@ def main():
     ffmpeg_args = [
         "ffmpeg",
         "-hide_banner",
-        "-loglevel", "error",
+        "-loglevel", "fatal",
         "-stats",
         "-i", new_afile
     ]
@@ -2147,10 +2158,8 @@ def main():
         ffmpeg_args.extend(["-i", new_thmbnail])
 
     if aonly:
-        print("Correcting audio container")
         mfile = os.path.join(fdir, "{0}.m4a".format(fname))
     else:
-        print("Muxing files")
         mfile = os.path.join(fdir, "{0}.mp4".format(fname))
 
         ffmpeg_args.extend([
@@ -2184,14 +2193,28 @@ def main():
         mfile = "{}-{}.{}".format(mfile_name, mfile_ctr, mfile_ext)
 
     ffmpeg_args.append(mfile)
+    ffmpeg_cmd = " ".join(shlex.quote(x) for x in ffmpeg_args)
+
+    if write_mux:
+        print("Writing ffmpeg command to create the final file to {0}".format(mux_file))
+        with open(mux_file, "w", encoding="utf-8") as f:
+            f.write(ffmpeg_cmd)
+        
+        sys.exit(0)
 
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         print("***COMMAND THAT WOULD HAVE BEEN RUN***\n")
-        print(" ".join(shlex.quote(x) for x in ffmpeg_args))
+        print(ffmpeg_cmd)
         print("\nffmpeg not found. Please install ffmpeg, then run the above command to create the final file.")
 
         sys.exit(0)
+
+
+    if aonly:
+        print("Correcting audio container")
+    else:
+        print("Muxing files")
 
     retcode = execute(ffmpeg_args)
 
