@@ -473,30 +473,33 @@ def get_player_response(info):
 
     :param info:
     """
-    vinfo = download_as_text(INFO_URL.format(info.vid))
-    parsedinfo = None
+    #vinfo = download_as_text(INFO_URL.format(info.vid))
+    #parsedinfo = None
     player_response = None
 
-    if not vinfo or len(vinfo) == 0:
+    """if not vinfo or len(vinfo) == 0:
         logwarn("get_video_info failed to return data.")
         logwarn("Attempting to get data from watch page.")
+    """
 
-        watch_html = download_as_text(WATCH_URL.format(info.vid))
-        if len(watch_html) == 0:
-            logwarn("Watch page did not return any data. What?")
-            return None
+    watch_html = download_as_text(WATCH_URL.format(info.vid))
+    if len(watch_html) == 0:
+        logwarn("Watch page did not return any data. What?")
+        return None
 
-        watch_parser = WatchPageParser()
-        watch_parser.feed(watch_html)
+    watch_parser = WatchPageParser()
+    watch_parser.feed(watch_html)
 
-        if len(watch_parser.player_response_text) == 0:
-            logwarn("Player response not found in the watch page.")
-            return None
+    if len(watch_parser.player_response_text) == 0:
+        logwarn("Player response not found in the watch page.")
+        return None
 
-        player_response = json.loads(watch_parser.player_response_text)
-    else:
+    player_response = json.loads(watch_parser.player_response_text)
+    
+    """else:
         parsedinfo = urllib.parse.parse_qs(vinfo)
         player_response = json.loads(parsedinfo["player_response"][0])
+    """
 
     return player_response
 
