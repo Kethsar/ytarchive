@@ -450,7 +450,7 @@ def download_as_text(url):
             data = resp.read()
     except Exception as err:
         logwarn("Failed to retrieve data from {0}: {1}".format(url, err))
-        return None
+        return ""
 
     return data.decode("utf-8")
 
