@@ -847,6 +847,7 @@ def get_video_info(info):
         if update_delta < RECHECK_TIME:
             return False
 
+        info.last_updated = time.time()
         vals = get_playable_player_response(info)
         if not vals:
             return False
@@ -970,7 +971,6 @@ def get_video_info(info):
 
         info.expires_in_seconds = int(streaming_data["expiresInSeconds"])
         info.is_live = is_live
-        info.last_updated = time.time()
 
     return True
 
