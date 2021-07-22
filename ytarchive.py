@@ -850,11 +850,12 @@ def get_video_info(info):
         info.last_updated = time.time()
         vals = get_playable_player_response(info)
         if not vals:
+            info.is_live = False
+            info.is_unavailable = True
             return False
 
         player_response = vals["player_response"]
         selected_qualities = vals["selected_qualities"]
-        video_details = player_response["videoDetails"]
         streaming_data = player_response["streamingData"]
         pmfr = player_response["microformat"]["playerMicroformatRenderer"]
         live_details = pmfr["liveBroadcastDetails"]
