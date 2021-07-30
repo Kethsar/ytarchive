@@ -216,6 +216,7 @@ class WatchPageParser(HTMLParser):
         if not data.startswith(INITIAL_PLAYER_RESPONSE_DECL):
             return
 
+        logdebug("Found script element with player response in watch page.")
         obj_start = data.find("{")
         obj_end = data.find("};", obj_start) + 1
 
