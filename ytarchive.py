@@ -42,7 +42,7 @@ ABOUT = {
 INFO_URL = "https://www.youtube.com/get_video_info?video_id={0}&el=detailpage&html5=1"
 WATCH_URL = "https://www.youtube.com/watch?v={0}"
 HTML_VIDEO_LINK_TAG = '<link rel="canonical" href="https://www.youtube.com/watch?v='
-INITIAL_PLAYER_RESPONSE_DECL = "var ytInitialPlayerResponse ="
+INITIAL_PLAYER_RESPONSE_DECL = "ytInitialPlayerResponse ="
 PLAYABLE_OK = "OK"
 PLAYABLE_OFFLINE = "LIVE_STREAM_OFFLINE"
 PLAYABLE_UNPLAYABLE = "UNPLAYABLE"
@@ -213,11 +213,12 @@ class WatchPageParser(HTMLParser):
             object delcaration. Should probably do a find instead of startswith
             for the variable declaration as well, but whatever.
         """
-        if not data.startswith(INITIAL_PLAYER_RESPONSE_DECL):
+        decl_start = data.find(INITIAL_PLAYER_RESPONSE_DECL)
+        if decl_start < 0:
             return
 
         logdebug("Found script element with player response in watch page.")
-        obj_start = data.find("{")
+        obj_start = data.find("{", decl_start)
         obj_end = data.find("};", obj_start) + 1
 
         if obj_end > obj_start:
