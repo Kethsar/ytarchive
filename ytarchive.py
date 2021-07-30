@@ -867,7 +867,8 @@ def get_video_info(info):
             # If not then download it. Else youtube-dl is a better choice.
             if "endTimestamp" in live_details:
                 # Assume that all formats will be fully processed if one is, and vice versa
-                if not "url" in streaming_data["adaptiveFormats"][0]:
+                if not ("adaptiveFormats" in streaming_data
+                    and "url" in streaming_data["adaptiveFormats"][0]):
                     print("Livestream has ended and is being processed. Download URLs are not available.")
                     return False
 
