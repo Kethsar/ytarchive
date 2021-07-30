@@ -618,7 +618,7 @@ def get_playable_player_response(info):
     while retry:
         player_response = get_player_response(info)
         if not player_response:
-            return None
+            return {"noPlayerResponse": True}
 
         if not "videoDetails" in player_response:
             if info.in_progress:
@@ -630,11 +630,11 @@ def get_playable_player_response(info):
                 info.is_unavailable = True
             else:
                 print("Video Details not found, video is likely private or does not exist.")
-            return None
+            return {}
 
         if not player_response["videoDetails"]["isLiveContent"]:
             print("{0} is not a livestream. It would be better to use youtube-dl to download it.".format(info.url))
-            return None
+            return {}
 
         playability = player_response["playabilityStatus"]
         playability_status = playability["status"]
@@ -644,7 +644,7 @@ def get_playable_player_response(info):
             if info.in_progress:
                 loginfo("Finishing download")
                 info.is_live = False
-            return None
+            return {}
 
         elif playability_status == PLAYABLE_UNPLAYABLE:
             logged_in = not player_response["responseContext"]["mainAppWebResponseContext"]["loggedOut"]
@@ -661,21 +661,21 @@ def get_playable_player_response(info):
                 info.print_status()
                 info.is_live = False
                 info.is_unavailable = True
-            return None
+            return {}
 
         elif playability_status == PLAYABLE_OFFLINE:
             # We've already started downloading, stream might be experiencing issues
             if info.in_progress:
                 logdebug("Livestream status is {0} mid-download".format(PLAYABLE_OFFLINE))
-                return None
+                return {}
 
             if info.wait == Action.DO_NOT:
                 print("Stream appears to be a future scheduled stream, and you opted not to wait.")
-                return None
+                return {}
 
             if first_wait and info.wait == Action.ASK and info.retry_secs == 0:
                 if not ask_wait_for_stream(info):
-                    return None
+                    return {}
 
             if first_wait:
                 print()
@@ -748,7 +748,7 @@ def get_playable_player_response(info):
             if info.in_progress:
                 info.is_live = False
 
-            return None
+            return {}
 
         if secs_late > 0:
             print()
@@ -850,6 +850,9 @@ def get_video_info(info):
         info.last_updated = time.time()
         vals = get_playable_player_response(info)
         if not vals:
+            return False
+        
+        if "noPlayerResponse" in vals:
             info.is_live = False
             info.is_unavailable = True
             return False
