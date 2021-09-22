@@ -150,6 +150,7 @@ class MediaDLInfo:
         self.download_url = ""
         self.base_fpath = ""
         self.data_type = ""
+        self.stopping = False
 
 
 # Miscellaneous information
@@ -1039,15 +1040,13 @@ def download_frags(data_type, info, seq_queue, data_queue, frag_files):
     :param data_queue:
     :param frag_files:
     """
-    downloading = True
-    frag_tries = 0
     url = info.mdl_info[data_type].download_url
     tname = threading.current_thread().getName()
 
-    while downloading:
+    while not info.mdl_info[data_type].stopping:
         # Check if the user decided to cancel this download, and exit gracefully
         with info.lock:
-            if info.stopping:
+            if info.stopping or info.mdl_info[data_type].stopping:
                 break
 
         tries = 0
@@ -1058,45 +1057,11 @@ def download_frags(data_type, info, seq_queue, data_queue, frag_files):
 
         try:
             seq, max_seq = seq_queue.get(timeout=info.target_duration)
-            frag_tries = 0
         except queue.Empty:
             # Check again in case the user opted to stop
             with info.lock:
-                if info.stopping:
-                    downloading = False
+                if info.stopping or info.mdl_info[data_type].stopping:
                     break
-
-            frag_tries += 1
-            if frag_tries >= FRAG_MAX_TRIES:
-                # For all instances where we might try to stop downloading,
-                # make sure the livestream is not still live.
-                # If it is, keep trying. Had all video download threads die
-                # somehow while a stream was still going. Hopefully this
-                # will fix that
-
-                with info.lock:
-                    if info.mdl_info[data_type].active_threads > 1:
-                        logdebug(
-                            "{0}: Starved for fragment numbers and multiple fragment threads running".format(tname))
-                        logdebug("{0}: Closing this thread to minimize unneeded network requests".format(tname))
-                        info.print_status()
-
-                        downloading = False
-                        continue
-
-                    if info.is_live:
-                        get_video_info(info)
-
-                    if not info.is_live:
-                        logdebug("{0}: Starved for fragment numbers and stream is offline".format(tname))
-                        downloading = False
-                    else:
-                        logdebug(
-                            "{0}: Could not get a new fragment to download after {1} tries and we are the only active downloader".format(
-                                tname, FRAG_MAX_TRIES))
-                        logdebug("{0}: That is an issue, hopefully it will correct itself".format(tname))
-                        info.print_status()
-                        frag_tries = 0
 
             continue
 
@@ -1104,7 +1069,7 @@ def download_frags(data_type, info, seq_queue, data_queue, frag_files):
             with info.lock:
                 if not info.is_live and seq >= max_seq:
                     logdebug("{0}: Stream is finished and highest sequence reached".format(tname))
-                    downloading = False
+                    info.mdl_info[data_type].stopping = True
                     break
 
         fname = "{0}.frag{1}.ts".format(info.mdl_info[data_type].base_fpath, seq)
@@ -1112,7 +1077,7 @@ def download_frags(data_type, info, seq_queue, data_queue, frag_files):
         while tries < FRAG_MAX_TRIES:
             with info.lock:
                 if info.stopping:
-                    downloading = False
+                    info.mdl_info[data_type].stopping = True
                     break
 
             bytes_written = 0
@@ -1180,7 +1145,7 @@ def download_frags(data_type, info, seq_queue, data_queue, frag_files):
                                     "{0}: Stream has ended and fragment within the last two not found, probably not actually created".format(
                                         tname))
                                 info.print_status()
-                                downloading = False
+                                info.mdl_info[data_type].stopping = True
                                 break
 
                 tries += 1
@@ -1196,7 +1161,7 @@ def download_frags(data_type, info, seq_queue, data_queue, frag_files):
                             logdebug(
                                 "{0}: Stream has ended and fragment number is within two of the known max, probably not actually created".format(
                                     tname))
-                            downloading = False
+                            info.mdl_info[data_type].stopping = True
                             try_delete(fname)
                             info.print_status()
                             break
@@ -1228,13 +1193,13 @@ def download_frags(data_type, info, seq_queue, data_queue, frag_files):
                                 "{0}: Download link likely expired and stream is privated or members only, cannot coninue download".format(
                                     tname))
                             info.print_status()
-                            downloading = False
+                            info.mdl_info[data_type].stopping = True
                         elif max_seq > -1 and seq < (max_seq - 2) and full_retries > 0:
                             logdebug("{0}: More than two fragments away from the highest known fragment".format(tname))
                             logdebug("{0}: Will try grabbing the fragment {1} more times".format(tname, full_retries))
                             info.print_status()
                         else:
-                            downloading = False
+                            info.mdl_info[data_type].stopping = True
                     else:
                         logdebug("{0}: Fragment {1}: Stream still live, continuing download attempt".format(tname, seq))
                         info.print_status()
@@ -1409,28 +1374,6 @@ def download_stream(data_type, dfile, progress_queue, info, frag_files):
 
             if stopping:
                 continue
-
-            # Threads closing prematurely possibly due to disk writes taking too long
-            # Open them back up
-            with info.lock:
-                if (max_seqs - cur_seq) > 100 and info.mdl_info[data_type].active_threads < info.thread_count:
-                    logdebug(
-                        "{0}-download: More than 100 fragments below the current max and less than the max threads are running".format(
-                            data_type))
-                    logdebug("{0}-download: Starting more threads".format(data_type))
-
-                    while info.mdl_info[data_type].active_threads < info.thread_count:
-                        t = threading.Thread(target=download_frags,
-                                             args=(data_type, info, seq_queue, data_queue, frag_files),
-                                             name="{0}{1}".format(data_type, tnum))
-
-                        dthreads.append(t)
-                        info.mdl_info[data_type].active_threads += 1
-                        tnum += 1
-                        seq_queue.put((cur_seq, max_seqs))
-                        cur_seq += 1
-                        active_downloads += 1
-                        t.start()
 
         # Refresh the info every hour to keep our download URLs up to date
         # Might not actually be that helpful but will prevent last-second
