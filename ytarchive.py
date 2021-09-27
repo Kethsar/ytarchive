@@ -1279,7 +1279,7 @@ def download_stream(data_type, dfile, progress_queue, info, frag_files):
                 # If we know the current max sequence number, use that to
                 # determine if we try for another fragment. Else just try anyway
                 if max_seqs > 0:
-                    while cur_seq <= max_seqs + 1:
+                    while (cur_seq <= max_seqs + 1) and active_downloads < info.thread_count:
                         # One higher than known max as we can download faster than
                         # the fragments are made
                         seq_queue.put((cur_seq, max_seqs))
