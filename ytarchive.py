@@ -1750,6 +1750,7 @@ def main():
     write_mux = False
     verbose = False
     debug = False
+    newline = False
     frag_files = True
     inet_family = 0
     merge_on_cancel = Action.ASK
@@ -1766,6 +1767,7 @@ def main():
                 "thumbnail",
                 "verbose",
                 "debug",
+                "newline",
                 "vp9",
                 "add-metadata",
                 "ipv4",
@@ -1820,6 +1822,8 @@ def main():
             info.vp9 = True
         elif o == "--debug":
             debug = True
+        elif o == "--newline":
+            newline = True
         elif o == "--add-metadata":
             add_meta = True
         elif o == "--write-description":
@@ -2025,11 +2029,15 @@ def main():
             if progress.max_seq > max_seqs:
                 max_seqs = progress.max_seq
 
-            status = "\rVideo fragments: {0}; Audio fragments: {1}; ".format(frags[DTYPE_VIDEO], frags[DTYPE_AUDIO])
+            status = "" if newline else "\r"
+            status += "Video fragments: {0}; Audio fragments: {1}; ".format(frags[DTYPE_VIDEO], frags[DTYPE_AUDIO])
             if debug:
                 status += "Max sequence: {0}; ".format(max_seqs)
 
-            status += "Total Downloaded: {0}{1}{2}".format(format_size(total_bytes), " " * 5, "\b" * 5)
+            if newline:
+                status += "Total Downloaded: {0}\n".format(format_size(total_bytes))
+            else:
+                status += "Total Downloaded: {0}{1}{2}".format(format_size(total_bytes), " " * 5, "\b" * 5)
             info.set_status(status)
         except queue.Empty:
             pass
