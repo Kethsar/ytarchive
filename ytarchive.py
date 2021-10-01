@@ -2120,7 +2120,7 @@ def main():
         "-i", new_afile
     ]
 
-    if thumbnail:
+    if thumbnail and not mergeMKV:
         ffmpeg_args.extend(["-i", new_thmbnail])
 
     if aonly:
@@ -2133,7 +2133,7 @@ def main():
             "-movflags", "faststart"
         ])
 
-        if thumbnail:
+        if thumbnail and not mergeMKV:
             ffmpeg_args.extend([
                 "-map", "0",
                 "-map", "1",
@@ -2141,8 +2141,10 @@ def main():
             ])
 
     ffmpeg_args.extend(["-c", "copy"])
-    if thumbnail:
+    if thumbnail and not mergeMKV:
         ffmpeg_args.extend(["-disposition:v:0", "attached_pic"])
+    if thumbnail and mergeMKV:
+        ffmpeg_args.extend(["-attach", new_thmbnail,"-metadata:s:t", "mimetype=image/jpeg"])
 
     if add_meta:
         for k, v in info.metadata.meta.items():
