@@ -81,26 +81,35 @@ class Action(Enum):
 # Simple class to more easily keep track of what fields are available for
 # file name formatting
 class FormatInfo:
-    finfo = {
-        "id": "",
-        "title": "",
-        "channel_id": "",
-        "channel": "",
-        "upload_date": ""
-    }
+    DEFAULT_FNAME_FORMAT = "%(title)s-%(id)s"
+
+    def __init__(self):
+        self.finfo = {
+            "id": "",
+            "url": "",
+            "title": "",
+            "channel_id": "",
+            "channel": "",
+            "upload_date": "",
+            "description": "",
+        }
 
     def set_info(self, player_response):
         pmfr = player_response["microformat"]["playerMicroformatRenderer"]
         vid_details = player_response["videoDetails"]
+        vid = vid_details["videoId"]
+        url = "https://www.youtube.com/watch?v={0}".format(vid)
         # "uploadDate" is actually when the livestream was created, not when it will start
         # Grab the actual start date from "startTimestamp"
         start_date = pmfr["liveBroadcastDetails"]["startTimestamp"].replace("-", "")
 
-        self.finfo["id"] = sterilize_filename(vid_details["videoId"])
-        self.finfo["title"] = sterilize_filename(vid_details["title"])
-        self.finfo["channel_id"] = sterilize_filename(vid_details["channelId"])
-        self.finfo["channel"] = sterilize_filename(vid_details["author"])
-        self.finfo["upload_date"] = sterilize_filename(start_date[:8])
+        self.finfo["id"] = vid
+        self.finfo["url"] = url
+        self.finfo["title"] = vid_details["title"]
+        self.finfo["channel_id"] = vid_details["channelId"]
+        self.finfo["channel"] = vid_details["author"]
+        self.finfo["upload_date"] = start_date[:8]
+        self.finfo["description"] = vid_details["shortDescription"]
 
 
 # Info to be sent through the progress queue
@@ -122,26 +131,29 @@ class Fragment:
 
 # Metadata for the final file
 class MetaInfo:
-    meta = {
-        "title": "",
-        "artist": "",
-        "date": "",
-        "comment": ""
-    }
+    DEFAULT_COMMENT_FORMAT = "%(url)s\n%(description)s"
 
-
-    def set_meta(self, player_response):
-        pmfr = player_response["microformat"]["playerMicroformatRenderer"]
-        vid_details = player_response["videoDetails"]
-        url = "https://www.youtube.com/watch?v={0}".format(vid_details["videoId"])
-        start_date = pmfr["liveBroadcastDetails"]["startTimestamp"].replace("-", "")
-
-        self.meta["title"] = vid_details["title"]
-        self.meta["artist"] = vid_details["author"]
-        self.meta["date"] = start_date[:8]
+    def __init__(self):
+        self.meta = {
+            "title": "",
+            "artist": "",
+            "date": "",
+            "comment": "",
+            "description": "",
+        }
         # MP4 doesn't allow for a url metadata field
-        # Just put it at the top of the description
-        self.meta["comment"] = "{0}\n\n{1}".format(url, vid_details["shortDescription"])
+        # Just put it at the top of the comment/description by default
+        self.comment_format = self.DEFAULT_COMMENT_FORMAT
+
+    def set_meta(self, format_info):
+        finfo = format_info.finfo
+        self.meta["title"] = finfo["title"]
+        self.meta["artist"] = finfo["channel"]
+        self.meta["date"] = finfo["upload_date"]
+        # Set both comment and description fields ala youtube-dl
+        comment = self.comment_format % finfo
+        self.meta["comment"] = comment
+        self.meta["description"] = comment
 
 
 class MediaDLInfo:
@@ -385,6 +397,7 @@ def sterilize_filename(fname):
 
     :param fname:
     """
+    fname = fname.partition('\n')[0]  # truncate to first line
     for c in BAD_CHARS:
         fname = fname.replace(c, "_")
 
@@ -973,7 +986,7 @@ def get_video_info(info):
         # Grab some extra info on the first run through this function
         if not info.in_progress:
             info.format_info.set_info(player_response)
-            info.metadata.set_meta(player_response)
+            info.metadata.set_meta(info.format_info)
             info.thumbnail = pmfr["thumbnail"]["thumbnails"][0]["url"]
             info.in_progress = True
 
@@ -1656,10 +1669,10 @@ Options:
         Do not wait for a livestream if it's a future scheduled stream.
 
     -o, --output FILENAME_FORMAT
-        Set the output file name EXCLUDING THE EXTENSION. Can include
-        formatting similar to youtube-dl, albeit much more limited.
-        See FORMAT OPTIONS below for a list of available format keys.
-        Default is '%(title)s-%(id)s'
+        Set the output file name EXCLUDING THE EXTENSION. Can be a format
+        template similar to youtube-dl, albeit much more limited.
+        See FORMAT TEMPLATE OPTIONS below for a list of available format keys.
+        Default is {FormatInfo.DEFAULT_FNAME_FORMAT!r}
 
     -r, --retry-stream SECONDS
         If waiting for a scheduled livestream, re-check if the stream is
@@ -1714,6 +1727,11 @@ Options:
     --write-thumbnail
         Write the thumbnail to a separate file.
 
+    --comment-format COMMENT_FORMAT
+        If writing metadata, format template of comment/description metadata.
+        See FORMAT TEMPLATE OPTIONS below for a list of available format keys.
+        Default is {MetaInfo.DEFAULT_COMMENT_FORMAT!r}
+
 Examples:
     {fname} -w
     {fname} -w https://www.youtube.com/watch?v=CnWDmKx9cQQ 1080p60/best
@@ -1724,15 +1742,22 @@ Examples:
     {fname} -o '%(channel)s/%(upload_date)s_%(title)s' https://www.youtube.com/watch?v=HxV9UAMN12o best
 
 
-FORMAT OPTIONS
-    Format keys provided are made to be the same as they would be for
+FORMAT TEMPLATE OPTIONS
+    Format template keys provided are made to be the same as they would be for
     youtube-dl. See https://github.com/ytdl-org/youtube-dl#output-template
 
+    For file names, each template substitution is sanitized by:
+    1. replacing invalid file name characters with underscore (_)
+    2. truncating to the first line (only relevant when substituting in description)
+
     id (string): Video identifier
+    url (string): Video URL
     title (string): Video title
     channel_id (string): ID of the channel
     channel (string): Full name of the channel the livestream is on
     upload_date (string): Technically stream date, UTC timezone (YYYYMMDD)
+    description (string): Video description
+        Note: not recommended to use description for file name due to max file name limitations
 """)
 
 
@@ -1742,7 +1767,7 @@ def main():
     opts = None
     args = None
     cfile = ""
-    fname_format = "%(title)s-%(id)s"
+    fname_format = FormatInfo.DEFAULT_FNAME_FORMAT
     thumbnail = False
     add_meta = False
     write_desc = False
@@ -1777,6 +1802,7 @@ def main():
                 "write-description",
                 "write-thumbnail",
                 "write-mux-file",
+                "comment-format=",
                 "merge",
                 "no-merge",
                 "save",
@@ -1836,6 +1862,10 @@ def main():
             write_thumb = True
         elif o == "--write-mux-file":
             write_mux = True
+        elif o == "--comment-format":
+            import ast
+            # Need to unescape input string so that e.g. \n turns into newline
+            info.metadata.comment_format = ast.literal_eval(f'"{a}"')
         elif o in ("-4", "--ipv4"):
             inet_family = socket.AF_INET
         elif o in ("-6", "--ipv6"):
@@ -1931,7 +1961,7 @@ def main():
         sys.exit(1)
 
     # Setup file name and directories
-    full_fpath = fname_format % info.format_info.finfo
+    full_fpath = fname_format % {k: sterilize_filename(v) for k, v in info.format_info.finfo.items()}
     fdir = os.path.dirname(full_fpath)
     # Strip os.path.sep to prevent attempting to save to root in the event
     # that the formatting info is missing a param used as a top-level dir
