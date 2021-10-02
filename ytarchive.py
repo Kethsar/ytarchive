@@ -1751,6 +1751,7 @@ def main():
     verbose = False
     debug = False
     newline = False
+    mergeMKV = False
     frag_files = True
     inet_family = 0
     merge_on_cancel = Action.ASK
@@ -1768,6 +1769,7 @@ def main():
                 "verbose",
                 "debug",
                 "newline",
+                "mkv",
                 "vp9",
                 "add-metadata",
                 "ipv4",
@@ -1824,6 +1826,8 @@ def main():
             debug = True
         elif o == "--newline":
             newline = True
+        elif o == "--mkv":
+            mergeMKV = True
         elif o == "--add-metadata":
             add_meta = True
         elif o == "--write-description":
@@ -2116,20 +2120,20 @@ def main():
         "-i", new_afile
     ]
 
-    if thumbnail:
+    if thumbnail and not mergeMKV:
         ffmpeg_args.extend(["-i", new_thmbnail])
 
     if aonly:
         mfile = os.path.join(fdir, "{0}.m4a".format(fname))
     else:
-        mfile = os.path.join(fdir, "{0}.mp4".format(fname))
+        mfile = os.path.join(fdir, "{0}.{1}".format(fname, "mkv" if mergeMKV else "mp4"))
 
         ffmpeg_args.extend([
             "-i", new_vfile,
             "-movflags", "faststart"
         ])
 
-        if thumbnail:
+        if thumbnail and not mergeMKV:
             ffmpeg_args.extend([
                 "-map", "0",
                 "-map", "1",
@@ -2137,8 +2141,10 @@ def main():
             ])
 
     ffmpeg_args.extend(["-c", "copy"])
-    if thumbnail:
+    if thumbnail and not mergeMKV:
         ffmpeg_args.extend(["-disposition:v:0", "attached_pic"])
+    if thumbnail and mergeMKV:
+        ffmpeg_args.extend(["-attach", new_thmbnail,"-metadata:s:t","filename=cover_land.jpg","-metadata:s:t", "mimetype=image/jpeg"])
 
     if add_meta:
         for k, v in info.metadata.meta.items():
