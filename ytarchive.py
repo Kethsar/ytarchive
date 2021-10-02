@@ -2144,7 +2144,7 @@ def main():
     if thumbnail and not mergeMKV:
         ffmpeg_args.extend(["-disposition:v:0", "attached_pic"])
     if thumbnail and mergeMKV:
-        ffmpeg_args.extend(["-attach", new_thmbnail,"-metadata:s:t", "mimetype=image/jpeg"])
+        ffmpeg_args.extend(["-attach", new_thmbnail,"-metadata:s:t","filename=cover_land.jpg","-metadata:s:t", "mimetype=image/jpeg"])
 
     if add_meta:
         for k, v in info.metadata.meta.items():
