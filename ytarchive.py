@@ -80,7 +80,7 @@ class Action(Enum):
 
 # Simple class to more easily keep track of what fields are available for
 # file name formatting
-class FormatInfo:
+class FormatInfo(dict):
     DEFAULT_FNAME_FORMAT = "%(title)s-%(id)s"
 
     DISALLOWED_FNAME_FORMAT_KEYS = [
@@ -88,7 +88,7 @@ class FormatInfo:
     ]
 
     def __init__(self):
-        self.finfo = {
+        dict.__init__(self, {
             "id": "",
             "url": "",
             "title": "",
@@ -96,7 +96,7 @@ class FormatInfo:
             "channel": "",
             "upload_date": "",
             "description": "",
-        }
+        })
 
     def set_info(self, player_response):
         pmfr = player_response["microformat"]["playerMicroformatRenderer"]
@@ -107,21 +107,21 @@ class FormatInfo:
         # Grab the actual start date from "startTimestamp"
         start_date = pmfr["liveBroadcastDetails"]["startTimestamp"].replace("-", "")
 
-        self.finfo["id"] = vid
-        self.finfo["url"] = url
-        self.finfo["title"] = vid_details["title"]
-        self.finfo["channel_id"] = vid_details["channelId"]
-        self.finfo["channel"] = vid_details["author"]
-        self.finfo["upload_date"] = start_date[:8]
-        self.finfo["description"] = vid_details["shortDescription"]
+        self["id"] = vid
+        self["url"] = url
+        self["title"] = vid_details["title"]
+        self["channel_id"] = vid_details["channelId"]
+        self["channel"] = vid_details["author"]
+        self["upload_date"] = start_date[:8]
+        self["description"] = vid_details["shortDescription"]
 
     def format(self, format_str):
-        return format_str % self.finfo
+        return format_str % self
 
     def filename_format(self, format_str):
         return format_str % {
             k: sterilize_filename(v)
-            for k, v in self.finfo.items()
+            for k, v in self.items()
             if k not in self.DISALLOWED_FNAME_FORMAT_KEYS
         }
 
@@ -144,30 +144,29 @@ class Fragment:
 
 
 # Metadata for the final file
-class MetaInfo:
+class MetaInfo(dict):
     DEFAULT_COMMENT_FORMAT = "%(url)s\n\n%(description)s"
 
     def __init__(self):
-        self.meta = {
+        dict.__init__(self, {
             "title": "",
             "artist": "",
             "date": "",
             "comment": "",
             "description": "",
-        }
+        })
         # MP4 doesn't allow for a url metadata field
         # Just put it at the top of the comment/description by default
         self.comment_format = self.DEFAULT_COMMENT_FORMAT
 
     def set_meta(self, format_info):
-        finfo = format_info.finfo
-        self.meta["title"] = finfo["title"]
-        self.meta["artist"] = finfo["channel"]
-        self.meta["date"] = finfo["upload_date"]
+        self["title"] = format_info["title"]
+        self["artist"] = format_info["channel"]
+        self["date"] = format_info["upload_date"]
         # Set both comment and description fields ala youtube-dl
         comment = format_info.format(self.comment_format)
-        self.meta["comment"] = comment
-        self.meta["description"] = comment
+        self["comment"] = comment
+        self["description"] = comment
 
 
 class MediaDLInfo:
@@ -1556,7 +1555,7 @@ def parse_input_url(info):
 
         info.gvideo_ddl = True
         info.vid = parsed_query["id"][0].rstrip(".1")  # googlevideo id param has .1 at the end for some reason
-        info.format_info.finfo["id"] = info.vid  # We cannot retrieve format info as normal. Set ID here
+        info.format_info["id"] = info.vid  # We cannot retrieve format info as normal. Set ID here
         itag = int(parsed_query["itag"][0])
         sq_idx = info.url.find("&sq=")
 
@@ -2036,9 +2035,9 @@ def main():
         thumbnail = False
         write_thumb = False
 
-    if write_desc and info.metadata.meta["comment"]:
+    if write_desc and info.metadata["comment"]:
         with open(desc_file, "w", encoding="utf-8") as f:
-            f.write(info.metadata.meta["comment"])
+            f.write(info.metadata["comment"])
 
     loginfo("Starting download to {0}".format(afile))
     athread = threading.Thread(target=download_stream,
@@ -2188,7 +2187,7 @@ def main():
         ffmpeg_args.extend(["-attach", new_thmbnail,"-metadata:s:t","filename=cover_land.jpg","-metadata:s:t", "mimetype=image/jpeg"])
 
     if add_meta:
-        for k, v in info.metadata.meta.items():
+        for k, v in info.metadata.items():
             if v:
                 ffmpeg_args.extend([
                     "-metadata",
