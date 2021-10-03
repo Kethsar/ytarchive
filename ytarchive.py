@@ -83,6 +83,10 @@ class Action(Enum):
 class FormatInfo:
     DEFAULT_FNAME_FORMAT = "%(title)s-%(id)s"
 
+    DISALLOWED_FNAME_FORMAT_KEYS = [
+        "description",
+    ]
+
     def __init__(self):
         self.finfo = {
             "id": "",
@@ -111,6 +115,16 @@ class FormatInfo:
         self.finfo["upload_date"] = start_date[:8]
         self.finfo["description"] = vid_details["shortDescription"]
 
+    def format(self, format_str):
+        return format_str % self.finfo
+
+    def filename_format(self, format_str):
+        return format_str % {
+            k: sterilize_filename(v)
+            for k, v in self.finfo.items()
+            if k not in self.DISALLOWED_FNAME_FORMAT_KEYS
+        }
+
 
 # Info to be sent through the progress queue
 class ProgressInfo:
@@ -131,7 +145,7 @@ class Fragment:
 
 # Metadata for the final file
 class MetaInfo:
-    DEFAULT_COMMENT_FORMAT = "%(url)s\n%(description)s"
+    DEFAULT_COMMENT_FORMAT = "%(url)s\n\n%(description)s"
 
     def __init__(self):
         self.meta = {
@@ -151,7 +165,7 @@ class MetaInfo:
         self.meta["artist"] = finfo["channel"]
         self.meta["date"] = finfo["upload_date"]
         # Set both comment and description fields ala youtube-dl
-        comment = self.comment_format % finfo
+        comment = format_info.format(self.comment_format)
         self.meta["comment"] = comment
         self.meta["description"] = comment
 
@@ -397,7 +411,6 @@ def sterilize_filename(fname):
 
     :param fname:
     """
-    fname = fname.partition('\n')[0]  # truncate to first line
     for c in BAD_CHARS:
         fname = fname.replace(c, "_")
 
@@ -1746,9 +1759,8 @@ FORMAT TEMPLATE OPTIONS
     Format template keys provided are made to be the same as they would be for
     youtube-dl. See https://github.com/ytdl-org/youtube-dl#output-template
 
-    For file names, each template substitution is sanitized by:
-    1. replacing invalid file name characters with underscore (_)
-    2. truncating to the first line (only relevant when substituting in description)
+    For file names, each template substitution is sanitized by replacing invalid file name
+    characters with underscore (_).
 
     id (string): Video identifier
     url (string): Video URL
@@ -1756,8 +1768,7 @@ FORMAT TEMPLATE OPTIONS
     channel_id (string): ID of the channel
     channel (string): Full name of the channel the livestream is on
     upload_date (string): Technically stream date, UTC timezone (YYYYMMDD)
-    description (string): Video description
-        Note: not recommended to use description for file name due to max file name limitations
+    description (string): Video description [disallowed for file name format template]
 """)
 
 
@@ -1935,7 +1946,7 @@ def main():
 
     # Test filename format to make sure a valid one was given
     try:
-        fname_format % info.format_info.finfo
+        info.format_info.filename_format(fname_format)
     except KeyError as err:
         logerror("Unknown output format key: {0}".format(err))
         sys.exit(1)
@@ -1961,7 +1972,7 @@ def main():
         sys.exit(1)
 
     # Setup file name and directories
-    full_fpath = fname_format % {k: sterilize_filename(v) for k, v in info.format_info.finfo.items()}
+    full_fpath = info.format_info.filename_format(fname_format)
     fdir = os.path.dirname(full_fpath)
     # Strip os.path.sep to prevent attempting to save to root in the event
     # that the formatting info is missing a param used as a top-level dir
