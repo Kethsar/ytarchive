@@ -96,6 +96,8 @@ class FormatInfo(dict):
             "channel_id": "",
             "channel": "",
             "upload_date": "",
+            "start_date": "",
+            "publish_date": "",
             "description": "",
         })
 
@@ -106,14 +108,20 @@ class FormatInfo(dict):
         url = "https://www.youtube.com/watch?v={0}".format(vid)
         # "uploadDate" is actually when the livestream was created, not when it will start
         # Grab the actual start date from "startTimestamp"
-        start_date = pmfr["liveBroadcastDetails"]["startTimestamp"].replace("-", "")
+        start_date = pmfr["liveBroadcastDetails"]["startTimestamp"].replace("-", "")[:8]
 
         self["id"] = vid
         self["url"] = url
         self["title"] = vid_details["title"]
         self["channel_id"] = vid_details["channelId"]
         self["channel"] = vid_details["author"]
-        self["upload_date"] = start_date[:8]
+        # upload_date: Rather than the actual upload date, stream start date is used to
+        # provide a better default date for youtube-dl output templates that use upload_date.
+        self["upload_date"] = start_date
+        self["start_date"] = start_date
+        # publish_date: uploadDate and publishDate seem to be the same for streams,
+        # so this can be used for actual upload date
+        self["publish_date"] = pmfr["publishDate"].replace("-", "")
         self["description"] = vid_details["shortDescription"]
 
     def format(self, format_str):
@@ -1763,8 +1771,17 @@ FORMAT TEMPLATE OPTIONS
     title (string): Video title
     channel_id (string): ID of the channel
     channel (string): Full name of the channel the livestream is on
-    upload_date (string): Technically stream date, UTC timezone (YYYYMMDD)
-    description (string): Video description [disallowed for file name format template]
+    upload_date (string: YYYYMMDD): Technically stream start date, UTC timezone - see note below
+    start_date * (string: YYYYMMDD): Stream start date, UTC timezone
+    publish_date * (string: YYYYMMDD): Stream publish date, UTC timezone
+    description *^ (string): Video description [disallowed for file name format template]
+
+    *   specific to ytarchive (not available in youtube-dl)
+    ^   disallowed for file name format template (only available for metadata format templates)
+
+    Note on upload_date: rather than the actual upload date, stream start date is used to
+    provide a better default date for youtube-dl output templates that use upload_date.
+    To get the actual upload date, publish date seems to be the same as upload date for streams.
 """)
 
 
