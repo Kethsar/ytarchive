@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import ast
 from enum import Enum
 import faulthandler
 import getopt
@@ -145,28 +146,20 @@ class Fragment:
 
 # Metadata for the final file
 class MetaInfo(dict):
-    DEFAULT_COMMENT_FORMAT = "%(url)s\n\n%(description)s"
-
     def __init__(self):
         dict.__init__(self, {
-            "title": "",
-            "artist": "",
-            "date": "",
-            "comment": "",
-            "description": "",
+            # Default format templates
+            "title": "%(title)s",
+            "artist": "%(channel)s",
+            "date": "%(upload_date)s",
+            # MP4 doesn't allow for a url metadata field
+            # Just put it at the top of the comment by default
+            "comment": "%(url)s\n\n%(description)s",
         })
-        # MP4 doesn't allow for a url metadata field
-        # Just put it at the top of the comment/description by default
-        self.comment_format = self.DEFAULT_COMMENT_FORMAT
 
     def set_meta(self, format_info):
-        self["title"] = format_info["title"]
-        self["artist"] = format_info["channel"]
-        self["date"] = format_info["upload_date"]
-        # Set both comment and description fields ala youtube-dl
-        comment = format_info.format(self.comment_format)
-        self["comment"] = comment
-        self["description"] = comment
+        for k, v in self.items():
+            self[k] = format_info.format(v)
 
 
 class MediaDLInfo:
@@ -1739,10 +1732,14 @@ Options:
     --write-thumbnail
         Write the thumbnail to a separate file.
 
-    --comment-format COMMENT_FORMAT
-        If writing metadata, format template of comment/description metadata.
+    --metadata KEY=VALUE
+        If writing metadata, overwrite/add metadata key-value entry.
+        KEY is a metadata key that ffmpeg recognizes. If invalid, ffmpeg may ignore it or error.
+        VALUE is a format template. If empty string (''), omit writing metadata for the key.
         See FORMAT TEMPLATE OPTIONS below for a list of available format keys.
-        Default is {MetaInfo.DEFAULT_COMMENT_FORMAT!r}
+        Default metadata format templates:
+            {'''
+            '''.join(f"{k}: {v!r}" for k, v in MetaInfo().items())}
 
 Examples:
     {fname} -w
@@ -1812,7 +1809,7 @@ def main():
                 "write-description",
                 "write-thumbnail",
                 "write-mux-file",
-                "comment-format=",
+                "metadata=",
                 "merge",
                 "no-merge",
                 "save",
@@ -1872,10 +1869,13 @@ def main():
             write_thumb = True
         elif o == "--write-mux-file":
             write_mux = True
-        elif o == "--comment-format":
-            import ast
-            # Need to unescape input string so that e.g. \n turns into newline
-            info.metadata.comment_format = ast.literal_eval(f'"{a}"')
+        elif o == "--metadata":
+            k, _, v = a.partition('=')
+            if len(v) == 0:
+                del info.metadata[k]
+            else:
+                # Need to unescape input string so that e.g. \n turns into newline
+                info.metadata[k] = ast.literal_eval(f'"{v}"')
         elif o in ("-4", "--ipv4"):
             inet_family = socket.AF_INET
         elif o in ("-6", "--ipv6"):
