@@ -257,8 +257,8 @@ func init() {
 	cliFlags.StringVar(&cookieFile, "cookies", "", "Cookies to be used when downloading.")
 	cliFlags.StringVar(&fnameFormat, "o", DefaultFilenameFormat, "Filename output format.")
 	cliFlags.StringVar(&fnameFormat, "output", DefaultFilenameFormat, "Filename output format.")
-	cliFlags.IntVar(&info.RetrySecs, "r", DefaultPollTime, "Seconds to wait between checking stream status.")
-	cliFlags.IntVar(&info.RetrySecs, "retry-stream", DefaultPollTime, "Seconds to wait between checking stream status.")
+	cliFlags.IntVar(&info.RetrySecs, "r", 0, "Seconds to wait between checking stream status.")
+	cliFlags.IntVar(&info.RetrySecs, "retry-stream", 0, "Seconds to wait between checking stream status.")
 	cliFlags.UintVar(&threadCount, "threads", 1, "Number of download threads for each stream type.")
 
 	cliFlags.Func("video-url", "Googlevideo URL for the video stream.", func(s string) error {
@@ -350,7 +350,7 @@ func run() int {
 		info.FragFiles = false
 	}
 
-	if info.RetrySecs < DefaultPollTime {
+	if info.RetrySecs > 0 && info.RetrySecs < DefaultPollTime {
 		info.RetrySecs = DefaultPollTime
 	}
 
