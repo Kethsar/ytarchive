@@ -180,7 +180,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 	for retry {
 		pr, err = di.GetPlayerResponse()
 		if err != nil {
-			LogError("Error retrieving player response: %#v", err)
+			LogError("Error retrieving player response: %s", err.Error())
 			return PlayerResponseNotFound, nil, nil
 		}
 
