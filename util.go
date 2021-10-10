@@ -538,7 +538,7 @@ func ContinueFragmentDownload(di *DownloadInfo, state *fragThreadState) bool {
 }
 
 func HandleFragHttpError(di *DownloadInfo, state *fragThreadState, statusCode int) {
-	LogDebug("%s: HTTP Error for fragment %d: %s", state.Name, state.SeqNum, http.StatusText(statusCode))
+	LogDebug("%s: HTTP Error for fragment %d: %d %s", state.Name, state.SeqNum, statusCode, http.StatusText(statusCode))
 	di.PrintStatus()
 
 	if statusCode == http.StatusForbidden {
