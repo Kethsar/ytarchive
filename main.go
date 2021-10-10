@@ -545,8 +545,11 @@ func run() int {
 			LogWarn("User Interrupt, Stopping download...")
 
 			for activeDownloads > 0 {
-				<-dlDoneChan
-				activeDownloads -= 1
+				select {
+				case <-progressChan:
+				case <-dlDoneChan:
+					activeDownloads -= 1
+				}
 			}
 
 			fmt.Println()

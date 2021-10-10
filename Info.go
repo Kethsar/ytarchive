@@ -77,6 +77,7 @@ type Fragment struct {
 	FileName    string
 	XHeadSeqNum int
 	Data        *bytes.Buffer
+	Slow        bool
 }
 
 type seqChanInfo struct {
@@ -89,7 +90,6 @@ type seqChanInfo struct {
 */
 type fragThreadState struct {
 	Name         string
-	Url          string
 	BaseFilePath string
 	DataType     string
 	SeqNum       int
@@ -161,13 +161,12 @@ func NewDownloadInfo() *DownloadInfo {
 	}
 }
 
-func NewFragThreadState(name, baseFPath, dataType, url string, toFile bool, sleepTime time.Duration) *fragThreadState {
+func NewFragThreadState(name, baseFPath, dataType string, toFile bool, sleepTime time.Duration) *fragThreadState {
 	return &fragThreadState{
 		Name:         name,
 		BaseFilePath: baseFPath,
 		DataType:     dataType,
 		ToFile:       toFile,
-		Url:          url,
 		SleepTime:    sleepTime,
 	}
 }
@@ -562,7 +561,10 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 	}
 
 	formats := streamData.AdaptiveFormats
-	di.TargetDuration = int(formats[0].TargetDurationSec)
+	targetDur := int(formats[0].TargetDurationSec)
+	if targetDur > 0 {
+		di.TargetDuration = targetDur
+	}
 	dlUrls := di.GetDownloadUrls(pr)
 
 	if di.Quality < 0 {
@@ -681,7 +683,8 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 			return
 		}
 
-		seqUrl := fmt.Sprintf(state.Url, state.SeqNum)
+		baseUrl := di.GetDownloadUrl(state.DataType)
+		seqUrl := fmt.Sprintf(baseUrl, state.SeqNum)
 
 		req, err := http.NewRequest("GET", seqUrl, nil)
 		if err != nil {
@@ -689,6 +692,8 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 		}
 
 		var resp *http.Response
+		dlStart := time.Now()
+
 		if req != nil {
 			host := di.GetDownloadUrlHost(state.DataType)
 			if len(host) > 0 {
@@ -720,6 +725,7 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 
 		respData, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		dlDuration := time.Since(dlStart)
 
 		if err != nil {
 			HandleFragDownloadError(di, state, err)
@@ -734,7 +740,7 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 		}
 
 		if resp.StatusCode >= 400 {
-			HandleFragHttpError(di, state, resp.StatusCode)
+			HandleFragHttpError(di, state, resp.StatusCode, baseUrl)
 
 			state.Tries += 1
 			if !ContinueFragmentDownload(di, state) {
@@ -786,11 +792,18 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 			data = bytes.NewBuffer(respData)
 		}
 
+		// Fragment took more than 1.5x its length to download and is not that close to the current max seq
+		isSlow := false
+		if headerSeqnum < 0 || state.SeqNum < (headerSeqnum-10) {
+			isSlow = dlDuration > (time.Duration(float64(di.TargetDuration)*1.5) * time.Second)
+		}
+
 		dataChan <- &Fragment{
 			Seq:         state.SeqNum,
 			XHeadSeqNum: headerSeqnum,
 			FileName:    fname,
 			Data:        data,
+			Slow:        isSlow,
 		}
 
 		return
@@ -803,7 +816,6 @@ func (di *DownloadInfo) DownloadFrags(dataType string, seqChan <-chan *seqChanIn
 		name,
 		di.GetBaseFilePath(dataType),
 		dataType,
-		di.GetDownloadUrl(dataType),
 		di.FragFiles,
 		time.Duration(di.TargetDuration)*time.Second,
 	)
@@ -830,8 +842,8 @@ func (di *DownloadInfo) DownloadFrags(dataType string, seqChan <-chan *seqChanIn
 }
 
 func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan chan<- *ProgressInfo, done chan<- struct{}) {
-	dataChan := make(chan *Fragment, di.Jobs)
-	seqChan := make(chan *seqChanInfo, di.Jobs)
+	dataChan := make(chan *Fragment, di.Jobs*2)
+	seqChan := make(chan *seqChanInfo, di.Jobs*2)
 	closed := false
 	curFrag := 0
 	curSeq := 0
@@ -839,6 +851,8 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 	maxSeqs := -1
 	tries := 10
 	jobNum := 1
+	slowFrags := 0
+	lastSlowFrag := 0
 	dataToWrite := make([]*Fragment, 0, di.Jobs)
 	deletingFrags := make([]string, 0, 1)
 	logName := fmt.Sprintf("%s-download", dataType)
@@ -864,14 +878,17 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 
 	for {
 		dataReceived := false
-		downloading := !di.IsFinished(dataType) || di.GetActiveJobCount(dataType) > 0
+		downloading := di.GetActiveJobCount(dataType) > 0
 		stopping := di.IsStopping()
 
-		if stopping || !downloading {
+		if stopping || !downloading || di.IsFinished(dataType) {
 			if !closed {
 				close(seqChan)
 				closed = true
 			}
+		} else if slowFrags >= 10 {
+			RefreshURL(di, dataType, "")
+			slowFrags = 0
 		}
 
 	getData:
@@ -900,6 +917,19 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 					seqChan <- &seqChanInfo{curSeq, maxSeqs}
 					curSeq += 1
 					activeDownloads += 1
+				}
+
+				if data.Slow {
+					// Only increment if it's been less than 10 frags since the last slow one
+					// Reset the counter otherwise. Should hopefully prevent getting rid of
+					// an otherwise good download url
+					if (data.Seq - lastSlowFrag) < 10 {
+						slowFrags += 1
+					} else {
+						slowFrags = 1
+					}
+
+					lastSlowFrag = data.Seq
 				}
 			default:
 				break getData

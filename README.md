@@ -6,10 +6,6 @@ A [WebUI front-end](https://github.com/lekoOwO/ytarchive-ui) was created by leko
 # Dependencies
 - [FFmpeg](https://ffmpeg.org/) needs to be installed to mux the final file.
 
-- For *nix systems, Python 3 is required, and should already be installed unless your system is 10 years old.
-
-- For Windows, an all-in-one binary is provided for each release. If you want to run the script on its own, you will also need Python 3.
-
 # Usage
 
 ```

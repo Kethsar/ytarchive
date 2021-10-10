@@ -497,6 +497,19 @@ func ParseGvideoUrl(gvUrl, dataType string) (string, int) {
 	return newUrl, itag
 }
 
+func RefreshURL(di *DownloadInfo, dataType, currentUrl string) {
+	if !di.IsGVideoDDL() {
+		newUrl := di.GetDownloadUrl(dataType)
+
+		if len(currentUrl) == 0 || newUrl == currentUrl {
+			LogDebug("%s: Attempting to retrieve a new download URL", dataType)
+			di.PrintStatus()
+
+			di.GetVideoInfo()
+		}
+	}
+}
+
 func ContinueFragmentDownload(di *DownloadInfo, state *fragThreadState) bool {
 	if di.IsFinished(state.DataType) {
 		return false
@@ -537,25 +550,13 @@ func ContinueFragmentDownload(di *DownloadInfo, state *fragThreadState) bool {
 	return true
 }
 
-func HandleFragHttpError(di *DownloadInfo, state *fragThreadState, statusCode int) {
+func HandleFragHttpError(di *DownloadInfo, state *fragThreadState, statusCode int, url string) {
 	LogDebug("%s: HTTP Error for fragment %d: %d %s", state.Name, state.SeqNum, statusCode, http.StatusText(statusCode))
 	di.PrintStatus()
 
 	if statusCode == http.StatusForbidden {
 		state.Is403 = true
-
-		if !di.IsGVideoDDL() {
-			LogDebug("%s: Attempting to retrieve a new download URL", state.Name)
-			di.PrintStatus()
-
-			newUrl := di.GetDownloadUrl(state.DataType)
-
-			if newUrl != state.Url {
-				state.Url = newUrl
-			} else if di.GetVideoInfo() {
-				state.Url = di.GetDownloadUrl(state.DataType)
-			}
-		}
+		RefreshURL(di, state.DataType, url)
 	} else if statusCode == http.StatusNotFound && state.MaxSeq > -1 && !di.IsLive() && state.SeqNum > (state.MaxSeq-2) {
 		LogDebug("%s: Stream has ended and fragment within the last two nor found, probably not actually created", state.Name)
 		di.PrintStatus()
