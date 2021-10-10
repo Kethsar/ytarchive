@@ -12,3 +12,5 @@ dist/
 *.json
 *.txt
 getvinfo.py
+*.sh
+ytarchive
