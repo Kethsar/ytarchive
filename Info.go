@@ -700,7 +700,6 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 			req.Header.Add("Origin", "https://www.youtube.com")
 			req.Header.Add("Cache-Control", "no-cache")
 			req.Header.Add("Pragma", "no-cache")
-			req.Header.Add("Accept", "*/*")
 
 			resp, err = client.Do(req)
 		} else {

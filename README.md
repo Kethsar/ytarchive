@@ -13,7 +13,7 @@ A [WebUI front-end](https://github.com/lekoOwO/ytarchive-ui) was created by leko
 # Usage
 
 ```
-usage: ytarchive.py [OPTIONS] [url] [quality]
+usage: ytarchive [OPTIONS] [url] [quality]
 
 	[url] is a youtube livestream URL. If not provided, you will be
 	prompted to enter one.
@@ -52,6 +52,17 @@ Options:
 	--merge
 		Automatically run the ffmpeg command for the downloaded streams
 		when sigint is received. You will be prompted otherwise.
+
+	--metadata KEY=VALUE
+		If writing metadata, overwrite/add metadata key-value entry.
+		KEY is a metadata key that ffmpeg recognizes. If invalid, ffmpeg may ignore it or error.
+		VALUE is a format template. If empty string (''), omit writing metadata for the key.
+		See FORMAT TEMPLATE OPTIONS below for a list of available format keys.
+		Can be used multiple times.
+
+	--mkv
+		Mux the final file into an mkv container instead of an mp4 container.
+		Ignored when downloading audio only.
 
 	--no-frag-files
 		Keep fragment data in memory instead of writing to an intermediate file.
@@ -98,9 +109,9 @@ Options:
 		video download, and THREAD_COUNT number of fragment downloaders
 		for both audio and video.
 		
-		The nature of Python means this script will never use more than a single
-		core worth of CPU, no matter how many threads are started. Setting this
-		above 5 is not recommended. Default is 1.
+		Setting this to a large number has a chance at causing the download
+		to start failing with HTTP 401. Restarting the download with a smaller
+		thread count until you no longer get 401s should work. Default is 1.
 
 	-t, --thumbnail
 		Download and embed the stream thumbnail in the finished file.
@@ -125,27 +136,43 @@ Options:
 
 	--write-description
 		Write the video description to a separate .description file.
+	
+	--write-mux-file
+		Write the ffmpeg command that would mux audio and video or put audio
+		into an mp4 container instead of running the command automatically.
+		Useful if you want to tweak the command, want a higher log level, etc.
 
 	--write-thumbnail
 		Write the thumbnail to a separate file.
 
 Examples:
-	ytarchive.py -w
-	ytarchive.py -w https://www.youtube.com/watch?v=CnWDmKx9cQQ 1080p60/best
-	ytarchive.py --threads 3 https://www.youtube.com/watch?v=ZK1GXnz-1Lw best
-	ytarchive.py --wait -r 30 https://www.youtube.com/channel/UCZlDXzGoo7d44bwdNObFacg/live best
-	ytarchive.py -c cookies-youtube-com.txt https://www.youtube.com/watch?v=_touw1GND-M best
-	ytarchive.py --no-wait --add-metadata https://www.youtube.com/channel/UCvaTdHTWBGv3MKj3KVqJVCw/live best
-	ytarchive.py -o '%(channel)s/%(upload_date)s_%(title)s' https://www.youtube.com/watch?v=HxV9UAMN12o best
+	ytarchive -w
+	ytarchive -w https://www.youtube.com/watch?v=CnWDmKx9cQQ 1080p60/best
+	ytarchive --threads 3 https://www.youtube.com/watch?v=ZK1GXnz-1Lw best
+	ytarchive --wait -r 30 https://www.youtube.com/channel/UCZlDXzGoo7d44bwdNObFacg/live best
+	ytarchive -c cookies-youtube-com.txt https://www.youtube.com/watch?v=_touw1GND-M best
+	ytarchive --no-wait --add-metadata https://www.youtube.com/channel/UCvaTdHTWBGv3MKj3KVqJVCw/live best
+	ytarchive -o '%(channel)s/%(upload_date)s_%(title)s' https://www.youtube.com/watch?v=HxV9UAMN12o best
 
 
-FORMAT OPTIONS
-	Format keys provided are made to be the same as they would be for
+FORMAT TEMPLATE OPTIONS
+	Format template keys provided are made to be the same as they would be for
 	youtube-dl. See https://github.com/ytdl-org/youtube-dl#output-template
 
+	For file names, each template substitution is sanitized by replacing invalid file name
+	characters with underscore (_).
+
 	id (string): Video identifier
+	url (string): Video URL
 	title (string): Video title
 	channel_id (string): ID of the channel
 	channel (string): Full name of the channel the livestream is on
-	upload_date (string): Technically stream date, UTC timezone (YYYYMMDD)
+	upload_date (string: YYYYMMDD): Technically stream start date, UTC timezone - see note below
+	start_date (string: YYYYMMDD): Stream start date, UTC timezone
+	publish_date (string: YYYYMMDD): Stream publish date, UTC timezone
+	description (string): Video description [disallowed for file name format template]
+
+	Note on upload_date: rather than the actual upload date, stream start date is used to
+	provide a better default date for youtube-dl output templates that use upload_date.
+	To get the actual upload date, publish date seems to be the same as upload date for streams.
 ```
