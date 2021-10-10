@@ -899,7 +899,7 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 				dataToWrite = append(dataToWrite, data)
 				activeDownloads -= 1
 
-				if !downloading || stopping {
+				if !downloading || stopping || closed {
 					continue
 				}
 
