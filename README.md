@@ -117,6 +117,9 @@ Options:
 	-v, --verbose
 		Print extra information.
 
+	-V, --version
+		Print the version number and exit.
+
 	--video-url GOOGLEVIDEO_URL
 		Pass in the given url as the video fragment url. Must be a
 		Google Video url with an itag parameter that is not 140.

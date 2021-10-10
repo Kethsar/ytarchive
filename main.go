@@ -21,10 +21,23 @@ const (
 	ActionDoNot
 )
 
+const (
+	MajorVersion = 0
+	MinorVersion = 3
+	PatchVersion = 0
+)
+
+var Commit string
+
+func PrintVersion() {
+	fmt.Printf("ytarchive %d.%d.%d%s\n", MajorVersion, MinorVersion, PatchVersion, Commit)
+}
+
 func PrintHelp() {
 	fname := filepath.Base(os.Args[0])
 	qlist := MakeQualityList(VideoQualities)
 
+	PrintVersion()
 	fmt.Printf(`
 usage: %[1]s [OPTIONS] [url] [quality]
 
@@ -134,6 +147,9 @@ Options:
 	-v, --verbose
 		Print extra information.
 
+	-V, --version
+		Print the version number and exit.
+
 	--video-url GOOGLEVIDEO_URL
 		Pass in the given url as the video fragment url. Must be a
 		Google Video url with an itag parameter that is not 140.
@@ -210,6 +226,7 @@ var (
 	forceIPv4         bool
 	forceIPv6         bool
 	showHelp          bool
+	showVersion       bool
 	doWait            bool
 	noWait            bool
 	doMerge           bool
@@ -225,8 +242,10 @@ func init() {
 	cliFlags = flag.NewFlagSet("cliFlags", flag.ExitOnError)
 	info = NewDownloadInfo()
 
-	cliFlags.BoolVar(&showHelp, "h", false, "Show the help message.")
-	cliFlags.BoolVar(&showHelp, "help", false, "Show the help message.")
+	cliFlags.BoolVar(&showHelp, "h", false, "Show the help message and exit.")
+	cliFlags.BoolVar(&showHelp, "help", false, "Show the help message and exit.")
+	cliFlags.BoolVar(&showVersion, "V", false, "Print the version number and exit.")
+	cliFlags.BoolVar(&showVersion, "version", false, "Print the version number and exit.")
 	cliFlags.BoolVar(&doWait, "w", false, "Wait for the stream to start.")
 	cliFlags.BoolVar(&doWait, "wait", false, "Wait for the stream to start.")
 	cliFlags.BoolVar(&noWait, "n", false, "Do not wait for the stream to start.")
@@ -305,6 +324,11 @@ func run() int {
 	if showHelp {
 		PrintHelp()
 		return 1
+	}
+
+	if showVersion {
+		PrintVersion()
+		return 0
 	}
 
 	mergeOnCancel := ActionAsk
