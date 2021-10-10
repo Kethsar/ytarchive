@@ -534,7 +534,7 @@ func run() int {
 			if statusNewlines {
 				status += "\n"
 			} else {
-				status += fmt.Sprintf("%s%s", strings.Repeat(" ", 5), strings.Repeat("\b", 5))
+				status += "\033[K"
 			}
 
 			info.SetStatus(status)
