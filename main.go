@@ -624,10 +624,6 @@ func run() int {
 		LogWarn("The files should still be mergable but data might be missing.")
 	}
 
-	if audioOnly {
-		mkv = false
-	}
-
 	newAudioFile := filepath.Join(fdir, fmt.Sprintf("%s.ts", afileName))
 	newVideoFile := filepath.Join(fdir, fmt.Sprintf("%s.ts", vfileName))
 	newThumbnail := filepath.Join(fdir, thmbnlName)
@@ -665,10 +661,10 @@ func run() int {
 		ffmpegArgs = append(ffmpegArgs, "-i", newThumbnail)
 	}
 
-	if audioOnly {
-		ext = "m4a"
-	} else if mkv {
+	if mkv {
 		ext = "mkv"
+	} else if audioOnly {
+		ext = "m4a"
 	} else {
 		ext = "mp4"
 	}
