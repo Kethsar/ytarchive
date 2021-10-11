@@ -568,7 +568,7 @@ func HandleFragDownloadError(di *DownloadInfo, state *fragThreadState, err error
 	LogDebug("%s: Error with fragment %d: %s", state.Name, state.SeqNum, err)
 	di.PrintStatus()
 
-	if state.MaxSeq > -1 && di.IsLive() && state.SeqNum >= (state.MaxSeq-2) {
+	if state.MaxSeq > -1 && !di.IsLive() && state.SeqNum >= (state.MaxSeq-2) {
 		LogDebug("%s: Stream has ended and fragment number is within two of the known max, probably not actually created", state.Name)
 		di.SetFinished(state.DataType)
 		di.PrintStatus()
