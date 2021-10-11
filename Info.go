@@ -908,7 +908,7 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 				}
 
 				if maxSeqs > 0 {
-					for curSeq <= maxSeqs+1 && activeDownloads < di.Jobs {
+					for (curSeq <= maxSeqs+1 && activeDownloads < di.Jobs) || activeDownloads < 1 {
 						seqChan <- &seqChanInfo{curSeq, maxSeqs}
 						curSeq += 1
 						activeDownloads += 1
