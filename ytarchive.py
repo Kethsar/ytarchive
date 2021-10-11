@@ -917,7 +917,7 @@ def get_video_info(info):
             info.dash_manifest_url = streaming_data["dashManifestUrl"]
 
         formats = streaming_data["adaptiveFormats"]
-        info.target_duration = formats[0]["targetDurationSec"]
+        info.target_duration = formats[0].get("targetDurationSec", info.target_duration)
         dl_urls = get_download_urls(info, formats)
 
         if info.quality < 0:
