@@ -28,10 +28,13 @@ const (
 	PatchVersion = 0
 )
 
-var Commit string
+var (
+	Commit    string
+	Candidate string
+)
 
 func PrintVersion() {
-	fmt.Printf("ytarchive %d.%d.%d%s\n", MajorVersion, MinorVersion, PatchVersion, Commit)
+	fmt.Printf("ytarchive %d.%d.%d%s%s\n", MajorVersion, MinorVersion, PatchVersion, Candidate, Commit)
 }
 
 func PrintHelp() {
