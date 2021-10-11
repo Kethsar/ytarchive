@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/alessio/shellescape"
+	"github.com/mattn/go-colorable"
 )
 
 // Action enum
@@ -320,6 +321,7 @@ func init() {
 // while also allowing early return with a non-0 exit code.
 func run() int {
 	cliFlags.Parse(os.Args[1:])
+	colorable.EnableColorsStdout(nil)
 
 	if showHelp {
 		PrintHelp()
