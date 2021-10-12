@@ -414,7 +414,7 @@ func GetAtoms(data []byte) map[string]Atom {
 	ofs := 0
 
 	for {
-		if ofs+8 > len(data) {
+		if ofs+8 >= len(data) {
 			break
 		}
 

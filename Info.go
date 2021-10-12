@@ -988,8 +988,8 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 			bytesWritten := 0
 			buf := make([]byte, BufferSize)
 
-			data.Data.Read(buf)
-			count, err := f.Write(RemoveSidx(buf))
+			rc, _ := data.Data.Read(buf)
+			count, err := f.Write(RemoveSidx(buf[:rc]))
 			bytesWritten += count
 
 			if err != nil {
