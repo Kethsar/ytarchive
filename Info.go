@@ -294,9 +294,13 @@ func (di *DownloadInfo) IsFinished(dataType string) bool {
 func (fi FormatInfo) SetInfo(player_response *PlayerResponse) {
 	pmfr := player_response.Microformat.PlayerMicroformatRenderer
 	vid := player_response.VideoDetails.VideoID
-	startDate := strings.ReplaceAll(pmfr.LiveBroadcastDetails.StartTimestamp, "-", "")[:8]
+	startDate := strings.ReplaceAll(pmfr.LiveBroadcastDetails.StartTimestamp, "-", "")
 	publishDate := strings.ReplaceAll(pmfr.PublishDate, "-", "")
 	url := fmt.Sprintf("https://www.youtube.com/watch?v=%s", vid)
+
+	if len(startDate) > 0 {
+		startDate = startDate[:8]
+	}
 
 	fi["id"] = vid
 	fi["url"] = url
