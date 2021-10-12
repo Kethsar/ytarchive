@@ -717,7 +717,7 @@ func run() int {
 	}
 
 	ffmpegArgs = append(ffmpegArgs, mergeFile)
-	ffmpegCmd := shellescape.QuoteCommand(ffmpegArgs)
+	ffmpegCmd := "ffmpeg " + shellescape.QuoteCommand(ffmpegArgs)
 
 	if writeMuxCmd {
 		fmt.Printf("Writing ffmpeg command to create the final file to %s\n", muxFile)
