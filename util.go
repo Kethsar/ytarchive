@@ -221,7 +221,7 @@ func Execute(prog string, args []string) int {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
-	LogDebug("Executing command: %s", shellescape.QuoteCommand(cmd.Args))
+	LogDebug("Executing command: %s %s", prog, shellescape.QuoteCommand(cmd.Args))
 
 	err := cmd.Run()
 	if err != nil {
