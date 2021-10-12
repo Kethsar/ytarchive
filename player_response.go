@@ -25,7 +25,6 @@ const (
 
 var (
 	playerRespDecl = []byte("var ytInitialPlayerResponse =")
-	errNotFound    = fmt.Errorf("unable to retrieve player response object")
 )
 
 /*
@@ -142,14 +141,12 @@ func (di *DownloadInfo) GetPlayerResponse() (*PlayerResponse, error) {
 
 	videoHtml := DownloadData(di.URL)
 	if len(videoHtml) == 0 {
-		LogWarn("Failed to retrieve data from the video page.")
-		return nil, errNotFound
+		return nil, fmt.Errorf("unable to retrieve data from video page")
 	}
 
 	prData := getPlayerResponseFromHtml(videoHtml)
 	if len(prData) == 0 {
-		LogWarn("Player response not found in the watch page.")
-		return nil, errNotFound
+		return nil, fmt.Errorf("unable to retrieve player response object from watch page")
 	}
 
 	err := json.Unmarshal(prData, pr)
@@ -169,7 +166,8 @@ func (di *DownloadInfo) GetPlayerResponse() (*PlayerResponse, error) {
 
 func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerResponse, selectedQualities []string) {
 	firstWait := true
-	retry := true
+	waitOnLiveURL := di.LiveURL && di.RetrySecs > 0
+	liveWaited := 0
 	var secsLate int
 	var err error
 
@@ -177,9 +175,21 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 		selectedQualities = ParseQualitySelection(VideoQualities, di.SelectedQuality)
 	}
 
-	for retry {
+	for {
 		pr, err = di.GetPlayerResponse()
 		if err != nil {
+			if waitOnLiveURL {
+				if liveWaited == 0 {
+					fmt.Printf("\nYou have opted to wait for a livestream to be scheduled. Waiting every %d seconds.\n", di.RetrySecs)
+				}
+
+				time.Sleep(time.Duration(di.RetrySecs) * time.Second)
+				liveWaited += di.RetrySecs
+				fmt.Printf("\rTotal time waited: %d seconds", liveWaited)
+				continue
+			}
+
+			fmt.Println()
 			LogError("Error retrieving player response: %s", err.Error())
 			return PlayerResponseNotFound, nil, nil
 		}
@@ -338,7 +348,8 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 		if secsLate > 0 {
 			fmt.Println()
 		}
-		retry = false
+
+		break
 	}
 
 	return PlayerResponseFound, pr, selectedQualities
