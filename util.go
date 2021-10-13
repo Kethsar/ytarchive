@@ -468,6 +468,7 @@ func ParseGvideoUrl(gvUrl, dataType string) (string, int) {
 		return newUrl, 0
 	}
 
+	gvUrl = strings.ReplaceAll(gvUrl, "%", "%%")
 	lowerHost := strings.ToLower(parsedUrl.Hostname())
 	sqIndex := strings.Index(gvUrl, "&sq=")
 
@@ -493,7 +494,7 @@ func ParseGvideoUrl(gvUrl, dataType string) (string, int) {
 		return newUrl, 0
 	}
 
-	newUrl = gvUrl[:sqIndex] + "&sq=%s"
+	newUrl = gvUrl[:sqIndex] + "&sq=%d"
 	return newUrl, itag
 }
 
