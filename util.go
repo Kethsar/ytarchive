@@ -527,8 +527,13 @@ func ContinueFragmentDownload(di *DownloadInfo, state *fragThreadState) bool {
 		}
 
 		if !di.IsLive() {
-			if di.IsUnavailable() && state.Is403 {
-				LogWarn("%s: Download link likely expired and stream is privated or members only, cannot coninue download", state.Name)
+			if state.Is403 {
+				if di.IsUnavailable() {
+					LogWarn("%s: Download link likely expired and stream is privated or members only, cannot coninue download", state.Name)
+				} else {
+					LogWarn("%s: Download link has likely expired and the stream has probably finished processing.", state.Name)
+					LogWarn("%s: You might want to use youtube-dl to download instead.", state.Name)
+				}
 				di.PrintStatus()
 				di.SetFinished(state.DataType)
 				return false
@@ -558,7 +563,7 @@ func HandleFragHttpError(di *DownloadInfo, state *fragThreadState, statusCode in
 		state.Is403 = true
 		RefreshURL(di, state.DataType, url)
 	} else if statusCode == http.StatusNotFound && state.MaxSeq > -1 && !di.IsLive() && state.SeqNum > (state.MaxSeq-2) {
-		LogDebug("%s: Stream has ended and fragment within the last two nor found, probably not actually created", state.Name)
+		LogDebug("%s: Stream has ended and fragment within the last two not found, probably not actually created", state.Name)
 		di.PrintStatus()
 		di.SetFinished(state.DataType)
 	}
