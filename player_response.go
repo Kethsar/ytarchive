@@ -114,7 +114,8 @@ func getPlayerResponseFromHtml(data []byte) []byte {
 					continue
 				}
 
-				LogDebug("Found script element with player response in watch page.")
+				// Maybe add a LogTrace in the future for stuff like this
+				//LogDebug("Found script element with player response in watch page.")
 				objStart := bytes.Index(data[declStart:], []byte("{")) + declStart
 				objEnd := bytes.Index(data[objStart:], []byte("};")) + 1 + objStart
 
@@ -332,6 +333,43 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 			continue
 
 		case PlayableOk:
+			streamData := pr.StreamingData
+			liveDetails := pr.Microformat.PlayerMicroformatRenderer.LiveBroadcastDetails
+			isLive := liveDetails.IsLiveNow
+
+			if !isLive && !di.InProgress {
+				/*
+					The livestream has likely ended already.
+					Check if the stream has been processed.
+					If not, then download it.
+				*/
+				if len(liveDetails.EndTimestamp) > 0 {
+					if len(streamData.AdaptiveFormats) > 0 {
+						// Assume that all formats will be fully processed if one is, and vice versa
+						if len(streamData.AdaptiveFormats[0].URL) == 0 {
+							fmt.Println("Livestream has ended and is being processed. Download URLs not available.")
+							return PlayerResponseNotUsable, nil, nil
+						}
+
+						if !IsFragmented(streamData.AdaptiveFormats[0].URL) {
+							fmt.Println("Livestream has been processed. Use youtube-dl instead.")
+							return PlayerResponseNotUsable, nil, nil
+						}
+					} else {
+						fmt.Println("Livestream has ended and is being processed. Download URLs not available.")
+						return PlayerResponseNotUsable, nil, nil
+					}
+				} else {
+					/*
+						I actually ran into this case once so far.
+						Stream is set as playable, but has not started.
+					*/
+					fmt.Println("Livestream is offline, should have started, and does not have an end timestamp.")
+					fmt.Printf("Waiting %d seconds and trying again.\n", DefaultPollTime)
+					time.Sleep(time.Duration(DefaultPollTime) * time.Second)
+					continue
+				}
+			}
 		default:
 			if secsLate > 0 {
 				fmt.Println()

@@ -528,37 +528,7 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 
 	streamData := pr.StreamingData
 	pmfr := pr.Microformat.PlayerMicroformatRenderer
-	liveDetails := pmfr.LiveBroadcastDetails
-	isLive := liveDetails.IsLiveNow
-
-	if !isLive && !di.InProgress {
-		/*
-			The livestream has likely ended already.
-			Check if the stream has been processed.
-			If not, then download it.
-		*/
-		if len(liveDetails.EndTimestamp) > 0 {
-			if len(streamData.AdaptiveFormats) > 0 {
-				// Assume that all formats will be fully processed if one is, and vice versa
-				if len(streamData.AdaptiveFormats[0].URL) == 0 {
-					fmt.Println("Livestream has ended and is being processed. Download URLs not available.")
-					return false
-				}
-
-				if !IsFragmented(streamData.AdaptiveFormats[0].URL) {
-					fmt.Println("Livestream has been processed. Use youtube-dl instead.")
-					return false
-				}
-			} else {
-				fmt.Println("Livestream has ended and is being processed. Download URLs not available.")
-				return false
-			}
-		} else {
-			// As far as I know, this code path really should never get hit
-			fmt.Println("Livestream is offline, should have started, but has not ended.")
-			fmt.Println("You could try again, or try youtube-dl.")
-		}
-	}
+	isLive := pmfr.LiveBroadcastDetails.IsLiveNow
 
 	if len(streamData.DashManifestURL) > 0 {
 		di.DashURL = streamData.DashManifestURL
