@@ -333,6 +333,13 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 			continue
 
 		case PlayableOk:
+			// player response returned from /live does not include full information
+			if di.LiveURL {
+				di.URL = fmt.Sprintf("https://www.youtube.com/watch?v=%s", di.VideoID)
+				di.LiveURL = false
+				continue
+			}
+
 			streamData := pr.StreamingData
 			liveDetails := pr.Microformat.PlayerMicroformatRenderer.LiveBroadcastDetails
 			isLive := liveDetails.IsLiveNow

@@ -677,8 +677,6 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 
 			req.Header.Add("User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0")
 			req.Header.Add("Origin", "https://www.youtube.com")
-			req.Header.Add("Cache-Control", "no-cache")
-			req.Header.Add("Pragma", "no-cache")
 
 			resp, err = client.Do(req)
 		} else {
