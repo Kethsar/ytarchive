@@ -148,6 +148,10 @@ Options:
 		Whether the thumbnail shows properly depends on your file browser.
 		Windows' seems to work. Nemo on Linux seemingly does not.
 
+	--trace
+		Print just about any information that might have reason to be printed.
+		Very spammy, do not use this unless you have good reason.
+
 	-v, --verbose
 		Print extra information.
 
@@ -226,6 +230,7 @@ var (
 	writeMuxCmd       bool
 	verbose           bool
 	debug             bool
+	trace             bool
 	noFragFiles       bool
 	forceIPv4         bool
 	forceIPv6         bool
@@ -265,6 +270,7 @@ func init() {
 	cliFlags.BoolVar(&verbose, "v", false, "Verbose logging output.")
 	cliFlags.BoolVar(&verbose, "verbose", false, "Verbose logging output.")
 	cliFlags.BoolVar(&debug, "debug", false, "Debug logging output.")
+	cliFlags.BoolVar(&trace, "trace", false, "Trace logging output.")
 	cliFlags.BoolVar(&info.VP9, "vp9", false, "Download VP9 video if available.")
 	cliFlags.BoolVar(&addMeta, "add-metadata", false, "Write metadata to the final file.")
 	cliFlags.BoolVar(&writeDesc, "write-description", false, "Write description to a separate file.")
@@ -339,7 +345,9 @@ func run() int {
 	mergeOnCancel := ActionAsk
 	saveOnCancel := ActionAsk
 
-	if debug {
+	if trace {
+		loglevel = LoglevelTrace
+	} else if debug {
 		loglevel = LoglevelDebug
 		verbose = true
 	} else if verbose {

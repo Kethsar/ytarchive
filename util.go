@@ -40,6 +40,7 @@ const (
 	LogleveWarning
 	LogleveInfo
 	LoglevelDebug
+	LoglevelTrace
 )
 
 const (
@@ -142,6 +143,16 @@ func LogDebug(format string, args ...interface{}) {
 			msg = fmt.Sprintf(format, args...)
 		}
 		log.Printf("DEBUG: \033[36m%s\033[0m\033[K", msg)
+	}
+}
+
+func LogTrace(format string, args ...interface{}) {
+	if loglevel >= LoglevelTrace {
+		msg := format
+		if len(args) > 0 {
+			msg = fmt.Sprintf(format, args...)
+		}
+		log.Printf("TRACE: \033[35m%s\033[0m\033[K", msg)
 	}
 }
 
@@ -489,9 +500,10 @@ func ParseGvideoUrl(gvUrl, dataType string) (string, int) {
 	} else if dataType == DtypeVideo && itag == AudioItag {
 		fmt.Println("Given video URL has the audio itag set. Make sure you set the correct URL(s)")
 		return newUrl, 0
-	} else if sqIndex < 0 {
-		fmt.Println("Given video URL did not have a sequence parameter.")
-		return newUrl, 0
+	}
+
+	if sqIndex < 0 {
+		sqIndex = len(gvUrl)
 	}
 
 	newUrl = gvUrl[:sqIndex] + "&sq=%d"
