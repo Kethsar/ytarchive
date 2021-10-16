@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strconv"
 	"time"
@@ -193,10 +192,6 @@ func (di *DownloadInfo) DownloadAndroidPlayerResponse() (*PlayerResponse, error)
 	if err != nil {
 		return nil, err
 	}
-
-	jsd := &bytes.Buffer{}
-	json.Indent(jsd, respData, "", "\t")
-	ioutil.WriteFile(fmt.Sprintf("%s.json", di.VideoID), jsd.Bytes(), 0644)
 
 	err = json.Unmarshal(respData, pr)
 	if err != nil {
