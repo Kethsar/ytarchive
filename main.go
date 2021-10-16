@@ -347,6 +347,7 @@ func run() int {
 
 	if trace {
 		loglevel = LoglevelTrace
+		verbose = true
 	} else if debug {
 		loglevel = LoglevelDebug
 		verbose = true

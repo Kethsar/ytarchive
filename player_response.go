@@ -116,7 +116,7 @@ type PlayerResponse struct {
 }
 
 // Search the given HTML for the player response object
-func getPlayerResponseFromHtml(data []byte) []byte {
+func GetPlayerResponseFromHtml(data []byte) []byte {
 	var objData []byte
 	reader := bytes.NewReader(data)
 	tokenizer := html.NewTokenizer(reader)
@@ -176,9 +176,26 @@ func (di *DownloadInfo) DownloadAndroidPlayerResponse() (*PlayerResponse, error)
 	req.Header.Add("content-type", "application/json")
 
 	if len(auth) > 0 {
-		req.Header.Add("X-Goog-AuthUser", "0") // Hardcode until someone complains
 		req.Header.Add("X-Origin", "https://www.youtube.com")
 		req.Header.Add("Authorization", auth)
+	}
+
+	if di.Ytcfg != nil {
+		if len(di.Ytcfg.IdToken) > 0 {
+			req.Header.Add("X-Youtube-Identity-Token", di.Ytcfg.IdToken)
+		}
+
+		if len(di.Ytcfg.DelegatedSessionId) > 0 {
+			req.Header.Add("X-Goog-PageId", di.Ytcfg.DelegatedSessionId)
+		}
+
+		if len(di.Ytcfg.VisitorData) > 0 {
+			req.Header.Add("X-Goog-Visitor-Id", di.Ytcfg.VisitorData)
+		}
+
+		if len(di.Ytcfg.SessionIndex) > 0 {
+			req.Header.Add("X-Goog-AuthUser", di.Ytcfg.SessionIndex)
+		}
 	}
 
 	resp, err := client.Do(req)
@@ -202,15 +219,14 @@ func (di *DownloadInfo) DownloadAndroidPlayerResponse() (*PlayerResponse, error)
 }
 
 // Get the player response object from youtube
-func (di *DownloadInfo) GetPlayerResponse() (*PlayerResponse, error) {
+func (di *DownloadInfo) GetPlayerResponse(videoHtml []byte) (*PlayerResponse, error) {
 	pr := &PlayerResponse{}
 
-	videoHtml := DownloadData(di.URL)
 	if len(videoHtml) == 0 {
 		return nil, fmt.Errorf("unable to retrieve data from video page")
 	}
 
-	prData := getPlayerResponseFromHtml(videoHtml)
+	prData := GetPlayerResponseFromHtml(videoHtml)
 	if len(prData) == 0 {
 		return nil, fmt.Errorf("unable to retrieve player response object from watch page")
 	}
@@ -242,7 +258,9 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 	}
 
 	for {
-		pr, err = di.GetPlayerResponse()
+		videoHtml := DownloadData(di.URL)
+		pr, err = di.GetPlayerResponse(videoHtml)
+
 		if err != nil {
 			if waitOnLiveURL {
 				if liveWaited == 0 {
@@ -441,6 +459,11 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 					time.Sleep(time.Duration(DefaultPollTime) * time.Second)
 					continue
 				}
+			}
+
+			err = di.GetYTCFG(videoHtml)
+			if err != nil {
+				LogDebug("Error getting ytcfg: %s", err.Error())
 			}
 		default:
 			if secsLate > 0 {

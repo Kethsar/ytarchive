@@ -736,8 +736,8 @@ func GenerateSAPISIDHash(origin *url.URL) string {
 	}
 
 	now := time.Now().Unix()
-	hashBytes := sha1.Sum([]byte(fmt.Sprintf("%d %s %s://%s", now, sapisidCookie.Value, origin.Scheme, origin.Host)))
+	hashBytes := sha1.Sum([]byte(fmt.Sprintf("%d %s https://www.youtube.com", now, sapisidCookie.Value)))
 	sapisidHash = hex.EncodeToString(hashBytes[:])
 
-	return sapisidHash
+	return fmt.Sprintf("SAPISIDHASH %d_%s", now, sapisidHash)
 }

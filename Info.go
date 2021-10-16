@@ -119,6 +119,7 @@ type DownloadInfo struct {
 	FormatInfo FormatInfo
 	Metadata   MetaInfo
 	CookiesURL *url.URL
+	Ytcfg      *YTCFG
 
 	Stopping    bool
 	InProgress  bool
@@ -546,6 +547,11 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 		di.TargetDuration = targetDur
 	}
 	dlUrls := di.GetDownloadUrls(pr)
+
+	if len(dlUrls) == 0 {
+		LogError("No download URLs found")
+		return false
+	}
 
 	if di.Quality < 0 {
 		var qualities []string
