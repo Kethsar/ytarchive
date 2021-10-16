@@ -483,6 +483,9 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 	if err != nil {
 		LogDebug("Error getting android player response: %s", err.Error())
 		usePR = pr
+	} else if len(androidPR.StreamingData.DashManifestURL) == 0 && len(usePR.StreamingData.AdaptiveFormats) == 0 {
+		LogDebug("Android API Player Response missing download URLs. Using web response.")
+		usePR = pr
 	} else {
 		LogDebug("Using Android API player response")
 		usePR = androidPR
