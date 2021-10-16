@@ -118,6 +118,7 @@ type DownloadInfo struct {
 	sync.RWMutex
 	FormatInfo FormatInfo
 	Metadata   MetaInfo
+	CookiesURL *url.URL
 
 	Stopping    bool
 	InProgress  bool
@@ -133,7 +134,6 @@ type DownloadInfo struct {
 	URL             string
 	SelectedQuality string
 	Status          string
-	DashURL         string
 
 	Wait           int
 	Quality        int
@@ -476,9 +476,19 @@ func (di *DownloadInfo) ParseInputUrl() error {
 */
 func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 	urls := make(map[int]string)
+	var usePR *PlayerResponse
+	androidPR, err := di.DownloadAndroidPlayerResponse()
 
-	if len(di.DashURL) > 0 {
-		manifest := DownloadData(di.DashURL)
+	if err != nil {
+		LogDebug("Error getting android player response: %s", err.Error())
+		usePR = pr
+	} else {
+		LogDebug("Using Android API player response")
+		usePR = androidPR
+	}
+
+	if len(usePR.StreamingData.DashManifestURL) > 0 {
+		manifest := DownloadData(usePR.StreamingData.DashManifestURL)
 		if len(manifest) > 0 {
 			urls = GetUrlsFromManifest(manifest)
 		}
@@ -488,7 +498,7 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 		}
 	}
 
-	for _, fmt := range pr.StreamingData.AdaptiveFormats {
+	for _, fmt := range usePR.StreamingData.AdaptiveFormats {
 		if len(fmt.URL) > 0 {
 			urls[fmt.Itag] = strings.ReplaceAll(fmt.URL, "%", "%%") + "&sq=%d"
 		}
@@ -529,10 +539,6 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 	streamData := pr.StreamingData
 	pmfr := pr.Microformat.PlayerMicroformatRenderer
 	isLive := pmfr.LiveBroadcastDetails.IsLiveNow
-
-	if len(streamData.DashManifestURL) > 0 {
-		di.DashURL = streamData.DashManifestURL
-	}
 
 	formats := streamData.AdaptiveFormats
 	targetDur := int(formats[0].TargetDurationSec)
@@ -637,7 +643,9 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 	if !di.InProgress {
 		di.FormatInfo.SetInfo(pr)
 		di.Metadata.SetInfo(di.FormatInfo)
-		di.Thumbnail = pmfr.Thumbnail.Thumbnails[0].URL
+		if len(pmfr.Thumbnail.Thumbnails) > 0 {
+			di.Thumbnail = pmfr.Thumbnail.Thumbnails[0].URL
+		}
 		di.InProgress = true
 	}
 

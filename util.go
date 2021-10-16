@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"encoding/hex"
 	"encoding/xml"
 	"errors"
@@ -251,7 +252,6 @@ func Execute(prog string, args []string) int {
 // Download data from the given URL
 func DownloadData(url string) []byte {
 	var data []byte
-
 	resp, err := client.Get(url)
 	if err != nil {
 		LogWarn("Failed to retrieve data from %s: %v", url, err)
@@ -429,7 +429,7 @@ func GetAtoms(data []byte) map[string]Atom {
 			break
 		}
 
-		lenHex := hex.Dump(data[ofs : ofs+4])
+		lenHex := hex.EncodeToString(data[ofs : ofs+4])
 		aLen, err := strconv.ParseInt(lenHex, 16, 0)
 
 		if err != nil || int(aLen) > len(data) {
@@ -694,4 +694,50 @@ func Contains(arr []string, val string) bool {
 	}
 
 	return false
+}
+
+// Logic taken from youtube-dl/yt-dlp, who got the hashing method from stack overflow
+// https://github.com/yt-dlp/yt-dlp/blob/e3950399e4d471b987a2d693f8a6a476568e7c8a/yt_dlp/extractor/youtube.py#L541
+// https://stackoverflow.com/a/32065323
+func GenerateSAPISIDHash(origin *url.URL) string {
+	var sapisidHash string
+	var sapisidCookie *http.Cookie
+	var papisidCookie *http.Cookie
+	cookies := client.Jar.Cookies(origin)
+	if len(cookies) == 0 {
+		return sapisidHash
+	}
+
+	for _, cookie := range cookies {
+		if cookie.Name == "SAPISID" {
+			sapisidCookie = cookie
+		} else if cookie.Name == "__Secure-3PAPISID" {
+			papisidCookie = cookie
+		}
+	}
+
+	if sapisidCookie == nil && papisidCookie == nil {
+		return sapisidHash
+	}
+
+	if sapisidCookie == nil {
+		sapisidCookie = &http.Cookie{
+			Domain:   papisidCookie.Domain,
+			Path:     papisidCookie.Path,
+			Secure:   papisidCookie.Secure,
+			Expires:  papisidCookie.Expires,
+			Name:     "SAPISID",
+			Value:    papisidCookie.Value,
+			HttpOnly: papisidCookie.HttpOnly,
+		}
+
+		cookies = append(cookies, sapisidCookie)
+		client.Jar.SetCookies(origin, cookies)
+	}
+
+	now := time.Now().Unix()
+	hashBytes := sha1.Sum([]byte(fmt.Sprintf("%d %s %s://%s", now, sapisidCookie.Value, origin.Scheme, origin.Host)))
+	sapisidHash = hex.EncodeToString(hashBytes[:])
+
+	return sapisidHash
 }

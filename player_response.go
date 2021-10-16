@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -15,6 +18,25 @@ const (
 	PlayableOffline    = "LIVE_STREAM_OFFLINE"
 	PlayableUnplayable = "UNPLAYABLE"
 	PlayableError      = "ERROR"
+
+	AndroidAPIPostData = `{
+	'context': {
+		'client': {
+			'clientName': 'ANDROID',
+			'clientVersion': '16.20',
+			'hl': 'en'
+		}
+	},
+	'videoId': '%s',
+	'playbackContext': {
+		'contentPlaybackContext': {
+			'html5Preference': 'HTML5_PREF_WANTS'
+		}
+	},
+	'contentCheckOk': true,
+	'racyCheckOk': true
+}
+	`
 )
 
 const (
@@ -134,6 +156,54 @@ func getPlayerResponseFromHtml(data []byte) []byte {
 			}
 		}
 	}
+}
+
+// At the time of adding, retrieving the player response from the api while
+// claiming to be the android client seems to result in unthrottled download
+// URLs. Credit to yt-dlp devs for POST data and headers.
+func (di *DownloadInfo) DownloadAndroidPlayerResponse() (*PlayerResponse, error) {
+	pr := &PlayerResponse{}
+	auth := GenerateSAPISIDHash(di.CookiesURL)
+	data := []byte(fmt.Sprintf(AndroidAPIPostData, di.VideoID))
+	req, err := http.NewRequest("POST", "https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8", bytes.NewBuffer(data))
+
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("X-YouTube-Client-Name", "3")
+	req.Header.Add("X-YouTube-Client-Version", "16.20")
+	req.Header.Add("Origin", "https://www.youtube.com")
+	req.Header.Add("content-type", "application/json")
+
+	if len(auth) > 0 {
+		req.Header.Add("X-Goog-AuthUser", "0") // Hardcode until someone complains
+		req.Header.Add("X-Origin", "https://www.youtube.com")
+		req.Header.Add("Authorization", auth)
+	}
+
+	resp, err := client.Do(req)
+
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	jsd := &bytes.Buffer{}
+	json.Indent(jsd, respData, "", "\t")
+	ioutil.WriteFile(fmt.Sprintf("%s.json", di.VideoID), jsd.Bytes(), 0644)
+
+	err = json.Unmarshal(respData, pr)
+	if err != nil {
+		return nil, err
+	}
+
+	return pr, nil
 }
 
 // Get the player response object from youtube

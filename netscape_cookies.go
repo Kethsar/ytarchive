@@ -29,7 +29,7 @@ const (
    Assume provided cookie file only contains cookies for a single site
    Maybe fix that later, not that we need to for this particular program
 */
-func ParseNetscapeCookiesFile(fname string) (*cookiejar.Jar, error) {
+func (di *DownloadInfo) ParseNetscapeCookiesFile(fname string) (*cookiejar.Jar, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{
 		PublicSuffixList: publicsuffix.List,
 	})
@@ -90,6 +90,7 @@ func ParseNetscapeCookiesFile(fname string) (*cookiejar.Jar, error) {
 
 		if err == nil {
 			jar.SetCookies(url, cookies)
+			di.CookiesURL = url
 		}
 	}
 

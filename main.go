@@ -432,7 +432,7 @@ func run() int {
 	}
 
 	if len(cookieFile) > 0 {
-		cjar, err := ParseNetscapeCookiesFile(cookieFile)
+		cjar, err := info.ParseNetscapeCookiesFile(cookieFile)
 		if err != nil {
 			LogError("Failed to load cookies file: %s", err)
 			return 1
@@ -454,6 +454,9 @@ func run() int {
 	if !strings.HasPrefix(fnameFormat, string(os.PathSeparator)) {
 		fdir = strings.TrimLeft(fdir, string(os.PathSeparator))
 	}
+	if len(strings.TrimSpace(fdir)) == 0 {
+		fdir = "."
+	}
 
 	fname := filepath.Base(fullFPath)
 	fname = SterilizeFilename(fname)
@@ -468,7 +471,7 @@ func run() int {
 		return 1
 	}
 
-	if len(fdir) > 0 {
+	if fdir != "." {
 		err = os.MkdirAll(fdir, 0755)
 		if err != nil {
 			LogWarn("Error creating final file directory: %s", err)
