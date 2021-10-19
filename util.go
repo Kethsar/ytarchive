@@ -701,6 +701,9 @@ func Contains(arr []string, val string) bool {
 // https://stackoverflow.com/a/32065323
 func GenerateSAPISIDHash(origin *url.URL) string {
 	var sapisidHash string
+	if origin == nil {
+		return sapisidHash
+	}
 	var sapisidCookie *http.Cookie
 	var papisidCookie *http.Cookie
 	cookies := client.Jar.Cookies(origin)
