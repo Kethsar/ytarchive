@@ -530,8 +530,8 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 		return false
 	}
 
-	di.LastUpdated = time.Now()
 	retrieved, pr, selQaulities := di.GetPlayablePlayerResponse()
+	di.LastUpdated = time.Now()
 	if retrieved == PlayerResponseNotFound {
 		di.Live = false
 		di.Unavailable = true

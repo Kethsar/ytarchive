@@ -701,11 +701,13 @@ func Contains(arr []string, val string) bool {
 // https://stackoverflow.com/a/32065323
 func GenerateSAPISIDHash(origin *url.URL) string {
 	var sapisidHash string
+	var sapisidCookie *http.Cookie
+	var papisidCookie *http.Cookie
+
 	if origin == nil {
 		return sapisidHash
 	}
-	var sapisidCookie *http.Cookie
-	var papisidCookie *http.Cookie
+
 	cookies := client.Jar.Cookies(origin)
 	if len(cookies) == 0 {
 		return sapisidHash
@@ -719,11 +721,11 @@ func GenerateSAPISIDHash(origin *url.URL) string {
 		}
 	}
 
-	if sapisidCookie == nil && papisidCookie == nil {
-		return sapisidHash
-	}
-
 	if sapisidCookie == nil {
+		if papisidCookie == nil {
+			return sapisidHash
+		}
+
 		sapisidCookie = &http.Cookie{
 			Domain:   papisidCookie.Domain,
 			Path:     papisidCookie.Path,
