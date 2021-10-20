@@ -46,6 +46,26 @@ var (
 		"720p60":     {H264: 298, VP9: 302},
 		"1080p":      {H264: 137, VP9: 248},
 		"1080p60":    {H264: 299, VP9: 303},
+		"1440p":      {H264: 264, VP9: 271},
+		"1440p60":    {H264: 304, VP9: 308},
+		"2160p":      {H264: 266, VP9: 313},
+		"2160p60":    {H264: 305, VP9: 315},
+	}
+
+	VideoQualities = []string{
+		"audio_only",
+		"144p",
+		"240p",
+		"360p",
+		"480p",
+		"720p",
+		"720p60",
+		"1080p",
+		"1080p60",
+		"1440p",
+		"1440p60",
+		"2160p",
+		"2160p60",
 	}
 )
 
@@ -562,22 +582,28 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 		found := false
 
 		for _, fmt := range formats {
-			if strings.HasPrefix(fmt.MimeType, "video/mp4") {
-				qlabel := strings.ToLower(fmt.QualityLabel)
-				priority := StringsIndex(VideoQualities, qlabel)
-				idx := 0
+			if !strings.HasPrefix(fmt.MimeType, "video") {
+				continue
+			}
 
-				for _, q := range qualities {
-					p := StringsIndex(VideoQualities, q)
-					if p > priority {
-						break
-					}
+			qlabel := strings.ToLower(fmt.QualityLabel)
+			priority := StringsIndex(VideoQualities, qlabel)
+			idx := 0
 
-					idx++
+			if Contains(qualities, fmt.QualityLabel) {
+				continue
+			}
+
+			for _, q := range qualities {
+				p := StringsIndex(VideoQualities, q)
+				if p > priority {
+					break
 				}
 
-				qualities = InsertStringAt(qualities, idx, qlabel)
+				idx++
 			}
+
+			qualities = InsertStringAt(qualities, idx, qlabel)
 		}
 
 		for !found {

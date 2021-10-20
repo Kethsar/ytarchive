@@ -82,18 +82,6 @@ var (
 	}
 )
 
-var VideoQualities = []string{
-	"audio_only",
-	"144p",
-	"240p",
-	"360p",
-	"480p",
-	"720p",
-	"720p60",
-	"1080p",
-	"1080p60",
-}
-
 var fnameReplacer = strings.NewReplacer(
 	"<", "_",
 	">", "_",
