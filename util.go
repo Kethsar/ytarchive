@@ -25,6 +25,10 @@ import (
 	"github.com/alessio/shellescape"
 )
 
+type MPD struct {
+	Representations []Representation `xml:"Period>AdaptationSet>Representation"`
+}
+
 // DASH Manifest element containing Youtube's media ID and a download URL
 type Representation struct {
 	Id      string `xml:"id,attr"`
@@ -377,15 +381,15 @@ func IsFragmented(url string) bool {
 // Prase the DASH manifest XML and get the download URLs from it
 func GetUrlsFromManifest(manifest []byte) map[int]string {
 	urls := make(map[int]string)
-	var reps []Representation
+	var mpd MPD
 
-	err := xml.Unmarshal(manifest, &reps)
+	err := xml.Unmarshal(manifest, &mpd)
 	if err != nil {
 		LogWarn("Error parsing DASH manifest: %s", err)
 		return urls
 	}
 
-	for _, r := range reps {
+	for _, r := range mpd.Representations {
 		itag, err := strconv.Atoi(r.Id)
 		if err != nil {
 			continue
