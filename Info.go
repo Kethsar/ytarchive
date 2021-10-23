@@ -632,7 +632,7 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 				_, vp9Ok := dlUrls[videoItag.VP9]
 				_, h264Ok := dlUrls[videoItag.H264]
 
-				if di.VP9 && vp9Ok {
+				if vp9Ok && (di.VP9 || !h264Ok) { // Sometimes a quality is VP9 only apparently
 					di.SetDownloadUrl(DtypeVideo, dlUrls[videoItag.VP9])
 					di.Quality = videoItag.VP9
 					found = true
