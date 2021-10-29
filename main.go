@@ -344,6 +344,7 @@ func run() int {
 
 	mergeOnCancel := ActionAsk
 	saveOnCancel := ActionAsk
+	var moveErrs []error
 
 	if trace {
 		loglevel = LoglevelTrace
@@ -608,10 +609,34 @@ func run() int {
 				}
 
 				if saveFiles {
-					TryMove(afile, filepath.Join(fdir, fmt.Sprintf("%s.ts", afileName)))
-					TryMove(vfile, filepath.Join(fdir, fmt.Sprintf("%s.ts", vfileName)))
-					TryMove(thmbnlFile, filepath.Join(fdir, thmbnlName))
-					TryMove(descFile, filepath.Join(fdir, descFileName))
+					ok := true
+
+					err = TryMove(afile, filepath.Join(fdir, fmt.Sprintf("%s.ts", afileName)))
+					moveErrs = append(moveErrs, err)
+
+					err = TryMove(vfile, filepath.Join(fdir, fmt.Sprintf("%s.ts", vfileName)))
+					moveErrs = append(moveErrs, err)
+
+					err = TryMove(thmbnlFile, filepath.Join(fdir, thmbnlName))
+					moveErrs = append(moveErrs, err)
+
+					err = TryMove(descFile, filepath.Join(fdir, descFileName))
+					moveErrs = append(moveErrs, err)
+
+					for _, err = range moveErrs {
+						if err != nil {
+							ok = false
+							break
+						}
+					}
+
+					if !ok {
+						LogError("At least one error occurred when moving files. Will not delete them.")
+					} else if tmpDir != fdir {
+						os.RemoveAll(tmpDir)
+					}
+				} else if tmpDir != fdir {
+					os.RemoveAll(tmpDir)
 				}
 
 				return 2
@@ -639,11 +664,19 @@ func run() int {
 	newThumbnail := filepath.Join(fdir, thmbnlName)
 	newDescFile := filepath.Join(fdir, descFileName)
 	muxFile := filepath.Join(fdir, muxFileName)
+	movesOk := true
 
-	TryMove(afile, newAudioFile)
-	TryMove(vfile, newVideoFile)
-	TryMove(thmbnlFile, newThumbnail)
-	TryMove(descFile, newDescFile)
+	moveErrs = append(moveErrs, TryMove(afile, newAudioFile))
+	moveErrs = append(moveErrs, TryMove(vfile, newVideoFile))
+	moveErrs = append(moveErrs, TryMove(thmbnlFile, newThumbnail))
+	moveErrs = append(moveErrs, TryMove(descFile, newDescFile))
+
+	for _, err = range moveErrs {
+		if err != nil {
+			movesOk = false
+			break
+		}
+	}
 
 	filesToDel := make([]string, 0, 3)
 	filesToDel = append(filesToDel, newAudioFile, newVideoFile)
@@ -764,7 +797,10 @@ func run() int {
 	}
 
 	CleanupFiles(filesToDel)
-	if tmpDir != fdir {
+
+	if !movesOk {
+		LogError("At least one error occurred when moving files. Will not delete them.")
+	} else if tmpDir != fdir {
 		os.RemoveAll(tmpDir)
 	}
 

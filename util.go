@@ -585,14 +585,15 @@ func HandleFragDownloadError(di *DownloadInfo, state *fragThreadState, err error
 	}
 }
 
-func TryMove(srcFile, dstFile string) {
+func TryMove(srcFile, dstFile string) error {
 	_, err := os.Stat(srcFile)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			LogWarn("Error moving file: %s", err)
+			return err
 		}
 
-		return
+		return nil
 	}
 
 	LogInfo("Moving file %s to %s", srcFile, dstFile)
@@ -600,7 +601,10 @@ func TryMove(srcFile, dstFile string) {
 	err = os.Rename(srcFile, dstFile)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		LogWarn("Error moving file: %s", err)
+		return err
 	}
+
+	return nil
 }
 
 func TryDelete(fname string) {
