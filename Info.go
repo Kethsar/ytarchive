@@ -589,8 +589,11 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 			qlabel := strings.ToLower(fmt.QualityLabel)
 			priority := StringsIndex(VideoQualities, qlabel)
 			idx := 0
+			videoItag := VideoLabelItags[qlabel]
+			_, vp9Ok := dlUrls[videoItag.VP9]
+			_, h264Ok := dlUrls[videoItag.H264]
 
-			if Contains(qualities, fmt.QualityLabel) {
+			if Contains(qualities, fmt.QualityLabel) || (!vp9Ok && !h264Ok) {
 				continue
 			}
 
@@ -654,7 +657,7 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 				i.e. 1080p60/720p60 when the stream is only available in 30 FPS
 			*/
 			if !found {
-				fmt.Println("\nThe qualities you selected ended up unavailble for this stream")
+				fmt.Println("\nThe qualities you selected ended up unavailable for this stream")
 				fmt.Println("You will now have the option to select from the available qualities")
 				selQaulities = selQaulities[len(selQaulities):]
 			}
