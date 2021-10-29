@@ -486,8 +486,6 @@ func run() int {
 		LogWarn("Error creating temp directory: %s", err)
 		LogWarn("Will download data directly to %s instead", fdir)
 		tmpDir = fdir
-	} else {
-		defer os.RemoveAll(tmpDir)
 	}
 
 	afileName := fmt.Sprintf("%s.f%d", fname, AudioItag)
@@ -766,6 +764,10 @@ func run() int {
 	}
 
 	CleanupFiles(filesToDel)
+	if tmpDir != fdir {
+		os.RemoveAll(tmpDir)
+	}
+
 	fmt.Printf("%[1]sFinal file: %[2]s%[1]s", "\n", mergeFile)
 
 	return 0
