@@ -63,6 +63,7 @@ type PlayerResponse struct {
 		Reason            string `json:"reason"`
 		LiveStreamability struct {
 			LiveStreamabilityRenderer struct {
+				VideoID      string `json:"videoId"`
 				OfflineSlate struct {
 					LiveStreamOfflineSlateRenderer struct {
 						ScheduledStartTime string `json:"scheduledStartTime"`
@@ -293,8 +294,13 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 			return PlayerResponseNotUsable, nil, nil
 		}
 
-		if !pr.VideoDetails.IsLiveContent {
-			LogError("%s is not a livestream. It would be better to use youtube-dl to download it.", di.URL)
+		if len(pr.PlayabilityStatus.LiveStreamability.LiveStreamabilityRenderer.VideoID) == 0 && !pr.VideoDetails.IsLiveContent {
+			if di.Live {
+				di.Live = false
+			} else {
+				LogError("%s is not a livestream. It would be better to use yt-dlp to download it.", di.URL)
+			}
+
 			return PlayerResponseNotUsable, nil, nil
 		}
 
@@ -442,7 +448,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 						}
 
 						if !IsFragmented(streamData.AdaptiveFormats[0].URL) {
-							fmt.Println("Livestream has been processed. Use youtube-dl instead.")
+							fmt.Println("Livestream has been processed. Use yt-dlp instead.")
 							return PlayerResponseNotUsable, nil, nil
 						}
 					} else {
