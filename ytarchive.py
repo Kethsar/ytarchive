@@ -661,7 +661,7 @@ def get_playable_player_response(info):
                 print("Video Details not found, video is likely private or does not exist.")
             return {}
 
-        if not player_response["videoDetails"]["isLiveContent"]:
+        if not player_response["microformat"]["playerMicroformatRenderer"].get("liveBroadcastDetails"): # either live stream or premiere
             print("{0} is not a livestream. It would be better to use youtube-dl to download it.".format(info.url))
             return {}
 
