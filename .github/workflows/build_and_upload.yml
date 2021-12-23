@@ -8,12 +8,12 @@ jobs:
   build_upload:
     runs-on: ubuntu-latest
     steps:
-      - name: checkout
+      - name: setup
         uses: actions/checkout@v2
-      - name: biuild
         uses: actions/setup-go@v2
         with:
           go-version: '1.17'
+      - name: build
         run: ./make.sh
       - name: version
         run: echo "::set-output name=version::$(./ytarchive -V)"
