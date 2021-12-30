@@ -6,6 +6,11 @@ A [WebUI front-end](https://github.com/lekoOwO/ytarchive-ui) was created by leko
 # Dependencies
 - [FFmpeg](https://ffmpeg.org/) needs to be installed to mux the final file.
 
+# Installation
+Run `go install github.com/Kethsar/ytarchive@master`
+
+Alternatively, download the latest pre-release from [the releases page](github.com/Kethsar/ytarchive)
+
 # Usage
 
 ```
