@@ -954,11 +954,7 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 			}
 		}
 
-		if !downloading {
-			break
-		}
-
-		if len(dataToWrite) == 0 || !dataReceived {
+		if (len(dataToWrite) == 0 || !dataReceived) && downloading {
 			if !stopping && activeDownloads <= 0 {
 				LogDebug("%s: Somehow no active downloads and no data to write", logName)
 				LogDebug("%s: Fragment this happened at: %d", logName, curFrag)
@@ -977,7 +973,6 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 
 		i := 0
 		for i < len(dataToWrite) && tries > 0 {
-
 			data := dataToWrite[i]
 			if data.Seq != curFrag {
 				i += 1
@@ -1073,10 +1068,10 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 			dataToWrite = append(dataToWrite[:i], dataToWrite[i+1:]...)
 			tries = 10
 			i = 0
+		}
 
-			if stopping || !downloading {
-				continue
-			}
+		if !downloading {
+			break
 		}
 
 		updateDelta := time.Since(di.LastUpdated)
