@@ -313,6 +313,12 @@ func (di *DownloadInfo) IsFinished(dataType string) bool {
 	return di.MDLInfo[dataType].Finished
 }
 
+func (di *DownloadInfo) GetTimeSinceUpdated() time.Duration {
+	di.RLock()
+	defer di.RUnlock()
+	return time.Since(di.LastUpdated)
+}
+
 func (fi FormatInfo) SetInfo(player_response *PlayerResponse) {
 	pmfr := player_response.Microformat.PlayerMicroformatRenderer
 	vid := player_response.VideoDetails.VideoID
@@ -1080,7 +1086,7 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 			break
 		}
 
-		updateDelta := time.Since(di.LastUpdated)
+		updateDelta := di.GetTimeSinceUpdated()
 		if !stopping && !di.IsUnavailable() && updateDelta > time.Hour {
 			di.GetVideoInfo()
 		}
