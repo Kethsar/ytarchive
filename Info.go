@@ -523,6 +523,11 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 		}
 	}
 
+	// DashManifest did not have any URLs and AdaptiveFormats is not actually here
+	if pr.StreamingData.AdaptiveFormats == nil {
+		return urls
+	}
+
 	for _, fmt := range usePR.StreamingData.AdaptiveFormats {
 		if len(fmt.URL) > 0 {
 			urls[fmt.Itag] = strings.ReplaceAll(fmt.URL, "%", "%%") + "&sq=%d"
