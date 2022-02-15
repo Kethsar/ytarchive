@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -62,6 +63,11 @@ const (
 	DefaultPollTime     = 15
 	DefaultVideoQuality = "best"
 )
+
+// If we run into file length issues, chances are the max file name length is around 255 bytes.
+// Seems Go automatically converts to long paths for Windows so we only have to worry about the
+// actual file name.
+const MaxFileNameLength = 243 // 255 - len(".description")
 
 var (
 	HtmlVideoLinkTag = []byte(`<link rel="canonical" href="https://www.youtube.com/watch?v=`)
@@ -624,7 +630,7 @@ func TryDelete(fname string) {
 	}
 }
 
-// Call os.State and check if err is os.ErrNotExist
+// Call os.Stat and check if err is os.ErrNotExist
 // Unsure if the file is guaranteed to exist when err is not nil or os.ErrNotExist
 func Exists(file string) bool {
 	_, err := os.Stat(file)
@@ -676,7 +682,22 @@ func FormatFilename(format string, vals map[string]string) (string, error) {
 		fnameVals[k] = SterilizeFilename(v)
 	}
 
-	return FormatPythonMapString(format, fnameVals)
+	fstr, err := FormatPythonMapString(format, fnameVals)
+	if err != nil {
+		return fstr, err
+	}
+
+	fnameLen := len(filepath.Base(fstr))
+	if fnameLen > MaxFileNameLength {
+		LogWarn("Formatted filename is too long. Truncating the title to try and fix.")
+		bytesOver := fnameLen - MaxFileNameLength
+		title := fnameVals["title"]
+		truncateLen := len(title) - bytesOver
+		fnameVals["title"] = TruncateString(title, truncateLen)
+		fstr, err = FormatPythonMapString(format, fnameVals)
+	}
+
+	return fstr, err
 }
 
 // Case insensitive search. Naive linear
@@ -741,4 +762,30 @@ func GenerateSAPISIDHash(origin *url.URL) string {
 	sapisidHash = hex.EncodeToString(hashBytes[:])
 
 	return fmt.Sprintf("SAPISIDHASH %d_%s", now, sapisidHash)
+}
+
+// Truncate the given string to be no more than the given number of bytes.
+// Returned string may be less than maxBytes depending on the size of characters
+// in the given string.
+func TruncateString(s string, maxBytes int) string {
+	var b strings.Builder
+	r := strings.NewReader(s)
+	curLen := 0
+	b.Grow(r.Len())
+
+	for {
+		char, size, err := r.ReadRune()
+		if err != nil {
+			break
+		}
+
+		curLen += size
+		if curLen > maxBytes {
+			break
+		}
+
+		b.WriteRune(char)
+	}
+
+	return b.String()
 }

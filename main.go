@@ -329,6 +329,7 @@ func init() {
 // ehh, bad way to do this probably but allows deferred functions to run
 // while also allowing early return with a non-0 exit code.
 func run() int {
+	PrintVersion()
 	cliFlags.Parse(os.Args[1:])
 	colorable.EnableColorsStdout(nil)
 
@@ -338,7 +339,6 @@ func run() int {
 	}
 
 	if showVersion {
-		PrintVersion()
 		return 0
 	}
 
@@ -451,13 +451,19 @@ func run() int {
 	// We checked if there would be errors earlier, should be good
 	fullFPath, _ := FormatFilename(fnameFormat, info.FormatInfo)
 	fdir := filepath.Dir(fullFPath)
-	tmpDir := ""
+	var tmpDir string
+	var absDir string
 
 	if !strings.HasPrefix(fnameFormat, string(os.PathSeparator)) {
 		fdir = strings.TrimLeft(fdir, string(os.PathSeparator))
 	}
 	if len(strings.TrimSpace(fdir)) == 0 {
 		fdir = "."
+	}
+
+	absDir, err = filepath.Abs(fdir)
+	if err == nil {
+		fdir = absDir
 	}
 
 	fname := filepath.Base(fullFPath)
@@ -489,11 +495,23 @@ func run() int {
 		tmpDir = fdir
 	}
 
+	// Check if file name is too long, truncate if so
+	if len(fname) > MaxFileNameLength {
+		LogError("fname len: %d", len(fname))
+		return 1
+	}
+
 	afileName := fmt.Sprintf("%s.f%d", fname, AudioItag)
 	vfileName := fmt.Sprintf("%s.f%d", fname, info.Quality)
 	thmbnlName := fmt.Sprintf("%s.jpg", fname)
 	descFileName := fmt.Sprintf("%s.description", fname)
-	muxFileName := fmt.Sprintf("%s.ffmpeg_command.txt", fname)
+	muxFileName := fmt.Sprintf("%s.ffmpeg.txt", fname)
+
+	finalAudioFile := filepath.Join(fdir, fmt.Sprintf("%s.ts", afileName))
+	finalVideoFile := filepath.Join(fdir, fmt.Sprintf("%s.ts", vfileName))
+	finalThumbnail := filepath.Join(fdir, thmbnlName)
+	finalDescFile := filepath.Join(fdir, descFileName)
+	muxFile := filepath.Join(fdir, muxFileName)
 
 	info.MDLInfo[DtypeAudio].BasePath = filepath.Join(tmpDir, afileName)
 	info.MDLInfo[DtypeVideo].BasePath = filepath.Join(tmpDir, vfileName)
@@ -611,16 +629,16 @@ func run() int {
 				if saveFiles {
 					ok := true
 
-					err = TryMove(afile, filepath.Join(fdir, fmt.Sprintf("%s.ts", afileName)))
+					err = TryMove(afile, finalAudioFile)
 					moveErrs = append(moveErrs, err)
 
-					err = TryMove(vfile, filepath.Join(fdir, fmt.Sprintf("%s.ts", vfileName)))
+					err = TryMove(vfile, finalVideoFile)
 					moveErrs = append(moveErrs, err)
 
-					err = TryMove(thmbnlFile, filepath.Join(fdir, thmbnlName))
+					err = TryMove(thmbnlFile, finalThumbnail)
 					moveErrs = append(moveErrs, err)
 
-					err = TryMove(descFile, filepath.Join(fdir, descFileName))
+					err = TryMove(descFile, finalDescFile)
 					moveErrs = append(moveErrs, err)
 
 					for _, err = range moveErrs {
@@ -659,17 +677,11 @@ func run() int {
 		LogWarn("The files should still be mergable but data might be missing.")
 	}
 
-	newAudioFile := filepath.Join(fdir, fmt.Sprintf("%s.ts", afileName))
-	newVideoFile := filepath.Join(fdir, fmt.Sprintf("%s.ts", vfileName))
-	newThumbnail := filepath.Join(fdir, thmbnlName)
-	newDescFile := filepath.Join(fdir, descFileName)
-	muxFile := filepath.Join(fdir, muxFileName)
 	movesOk := true
-
-	moveErrs = append(moveErrs, TryMove(afile, newAudioFile))
-	moveErrs = append(moveErrs, TryMove(vfile, newVideoFile))
-	moveErrs = append(moveErrs, TryMove(thmbnlFile, newThumbnail))
-	moveErrs = append(moveErrs, TryMove(descFile, newDescFile))
+	moveErrs = append(moveErrs, TryMove(afile, finalAudioFile))
+	moveErrs = append(moveErrs, TryMove(vfile, finalVideoFile))
+	moveErrs = append(moveErrs, TryMove(thmbnlFile, finalThumbnail))
+	moveErrs = append(moveErrs, TryMove(descFile, finalDescFile))
 
 	for _, err = range moveErrs {
 		if err != nil {
@@ -679,14 +691,10 @@ func run() int {
 	}
 
 	filesToDel := make([]string, 0, 3)
-	filesToDel = append(filesToDel, newAudioFile, newVideoFile)
+	filesToDel = append(filesToDel, finalAudioFile, finalVideoFile)
 	if !writeThumbnail {
-		filesToDel = append(filesToDel, newThumbnail)
+		filesToDel = append(filesToDel, finalThumbnail)
 	}
-
-	// TODO: Remove the defer function above to delete the tmpdir and check that
-	// all TryMove() calls completed instead, so as to not delete something we
-	// don't mean to
 
 	retcode := 0
 	mergeFile := ""
@@ -697,11 +705,11 @@ func run() int {
 		"-nostdin",
 		"-loglevel", "fatal",
 		"-stats",
-		"-i", newAudioFile,
+		"-i", finalAudioFile,
 	)
 
 	if downloadThumbnail && !mkv {
-		ffmpegArgs = append(ffmpegArgs, "-i", newThumbnail)
+		ffmpegArgs = append(ffmpegArgs, "-i", finalThumbnail)
 	}
 
 	if mkv {
@@ -715,7 +723,7 @@ func run() int {
 	mergeFile = filepath.Join(fdir, fmt.Sprintf("%s.%s", fname, ext))
 
 	if !audioOnly {
-		ffmpegArgs = append(ffmpegArgs, "-i", newVideoFile)
+		ffmpegArgs = append(ffmpegArgs, "-i", finalVideoFile)
 		if !mkv {
 			ffmpegArgs = append(ffmpegArgs, "-movflags", "faststart")
 		}
@@ -733,7 +741,7 @@ func run() int {
 	if downloadThumbnail {
 		if mkv {
 			ffmpegArgs = append(ffmpegArgs,
-				"-attach", newThumbnail,
+				"-attach", finalThumbnail,
 				"-metadata:s:t", "filename=cover_land.jpg",
 				"-metadata:s:t", "mimetype=image/jpeg",
 			)

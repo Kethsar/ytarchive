@@ -202,6 +202,7 @@ func NewFormatInfo() FormatInfo {
 		"start_date":   "",
 		"publish_date": "",
 		"description":  "",
+		"url":          "",
 	}
 }
 
