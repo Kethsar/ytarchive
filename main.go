@@ -771,14 +771,7 @@ func run() int {
 	ffmpegCmd := "ffmpeg " + shellescape.QuoteCommand(ffmpegArgs)
 
 	if writeMuxCmd {
-		fmt.Printf("Writing ffmpeg command to create the final file to %s\n", muxFile)
-		err = os.WriteFile(muxFile, []byte(ffmpegCmd), 0644)
-		if err != nil {
-			LogError("Error writing muxcmd file: %s", err.Error())
-			return 1
-		}
-
-		return 0
+		return WriteMuxFile(muxFile, ffmpegCmd)
 	}
 
 	_, err = exec.LookPath("ffmpeg")
@@ -786,11 +779,10 @@ func run() int {
 		fmt.Println(ffmpegCmd)
 		LogError("\nffmpeg not found. Please install ffmpeg")
 
-		fmt.Printf("Writing ffmpeg command to create the final file to %s\n", muxFile)
-		err = os.WriteFile(muxFile, []byte(ffmpegCmd), 0644)
-		if err != nil {
+		retcode = WriteMuxFile(muxFile, ffmpegCmd)
+		if retcode != 0 {
 			fmt.Println(ffmpegCmd)
-			LogError("\nError writing muxcmd file: %s", err.Error())
+			LogError("\nThere was an error writing the muxcmd file.")
 			LogError("The command has been ouput above instead.")
 		}
 
@@ -799,8 +791,16 @@ func run() int {
 
 	retcode = Execute("ffmpeg", ffmpegArgs)
 	if retcode != 0 {
+		wRetcode := WriteMuxFile(muxFile, ffmpegCmd)
+		if wRetcode != 0 {
+			fmt.Println(ffmpegCmd)
+			LogError("\nThere was an error writing the muxcmd file.")
+			LogError("The command has been ouput above instead.")
+		}
+
 		LogError("Execute returned code %d. Something must have gone wrong with ffmpeg.", retcode)
 		LogError("The .ts files will not be deleted in case the final file is broken.")
+		LogError("Finally, the ffmpeg command was either written to a file or output above.")
 		return retcode
 	}
 

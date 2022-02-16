@@ -789,3 +789,14 @@ func TruncateString(s string, maxBytes int) string {
 
 	return b.String()
 }
+
+func WriteMuxFile(muxFile, ffmpegCmd string) int {
+	fmt.Printf("Writing ffmpeg command to create the final file to %s\n", muxFile)
+	err := os.WriteFile(muxFile, []byte(ffmpegCmd), 0644)
+	if err != nil {
+		LogError("Error writing muxcmd file: %s", err.Error())
+		return 1
+	}
+
+	return 0
+}
