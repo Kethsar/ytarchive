@@ -41,6 +41,11 @@ type Atom struct {
 	Length int
 }
 
+type FFMpegArgs struct {
+	Args     []string
+	FileName string
+}
+
 const (
 	LogleveError = iota
 	LogleveWarning
@@ -799,4 +804,82 @@ func WriteMuxFile(muxFile, ffmpegCmd string) int {
 	}
 
 	return 0
+}
+
+func GetFFmpegArgs(audioFile, videoFile, thumbnail, fileDir, fileName string, onlyAudio bool) FFMpegArgs {
+	mergeFile := ""
+	ext := ""
+	ffmpegArgs := make([]string, 0, 12)
+	ffmpegArgs = append(ffmpegArgs,
+		"-hide_banner",
+		"-nostdin",
+		"-loglevel", "fatal",
+		"-stats",
+		"-i", audioFile,
+	)
+
+	if downloadThumbnail && !mkv {
+		ffmpegArgs = append(ffmpegArgs, "-i", thumbnail)
+	}
+
+	if mkv {
+		ext = "mkv"
+	} else if onlyAudio {
+		ext = "m4a"
+	} else {
+		ext = "mp4"
+	}
+
+	mergeCounter := 0
+	mergeFile = filepath.Join(fileDir, fmt.Sprintf("%s.%s", fileName, ext))
+	for Exists(mergeFile) && mergeCounter < 10 {
+		mergeCounter += 1
+		mergeFile = filepath.Join(fileDir, fmt.Sprintf("%s-%d.%s", fileName, mergeCounter, ext))
+	}
+
+	if !onlyAudio {
+		ffmpegArgs = append(ffmpegArgs, "-i", videoFile)
+		if !mkv {
+			ffmpegArgs = append(ffmpegArgs, "-movflags", "faststart")
+		}
+
+		if downloadThumbnail && !mkv {
+			ffmpegArgs = append(ffmpegArgs,
+				"-map", "0",
+				"-map", "1",
+				"-map", "2",
+			)
+		}
+	}
+
+	ffmpegArgs = append(ffmpegArgs, "-c", "copy")
+	if downloadThumbnail {
+		if mkv {
+			ffmpegArgs = append(ffmpegArgs,
+				"-attach", thumbnail,
+				"-metadata:s:t", "filename=cover_land.jpg",
+				"-metadata:s:t", "mimetype=image/jpeg",
+			)
+		} else {
+			ffmpegArgs = append(ffmpegArgs, "-disposition:v:0", "attached_pic")
+		}
+	}
+
+	if addMeta {
+		for k, v := range info.Metadata {
+			if len(v) > 0 {
+				ffmpegArgs = append(ffmpegArgs,
+					"-metadata",
+					fmt.Sprintf("%s=%s", strings.ToUpper(k), v),
+				)
+			}
+		}
+	}
+
+	ffmpegArgs = append(ffmpegArgs, mergeFile)
+
+	return FFMpegArgs{
+		Args:     ffmpegArgs,
+		FileName: mergeFile,
+	}
 }

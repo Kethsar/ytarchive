@@ -41,7 +41,6 @@ func PrintHelp() {
 	fname := filepath.Base(os.Args[0])
 	qlist := MakeQualityList(VideoQualities)
 
-	PrintVersion()
 	fmt.Printf(`
 usage: %[1]s [OPTIONS] [url] [quality]
 
@@ -143,6 +142,11 @@ Options:
 	--save
 		Automatically save any downloaded data and files if not having
 		ffmpeg run when sigint is received. You will be prompted otherwise.
+
+	--separate-audio
+		Save the audio to a separate file, similar to when downloading
+		audio_only, alongside the final muxed file. This includes embedding
+		metadata and the thumbnail if set.
 
 	--threads THREAD_COUNT
 		Set the number of threads to use for downloading audio and video
@@ -290,6 +294,7 @@ var (
 	mkv               bool
 	statusNewlines    bool
 	keepTSFiles       bool
+	separateAudio     bool
 )
 
 func init() {
@@ -329,6 +334,7 @@ func init() {
 	cliFlags.BoolVar(&statusNewlines, "newline", false, "Write progress to a new line instead of keeping it on one line.")
 	cliFlags.BoolVar(&keepTSFiles, "k", false, "Keep the raw .ts files instead of deleting them after muxing.")
 	cliFlags.BoolVar(&keepTSFiles, "keep-ts-files", false, "Keep the raw .ts files instead of deleting them after muxing.")
+	cliFlags.BoolVar(&separateAudio, "separate-audio", false, "Save a copy of the audio separately along with the muxed file.")
 	cliFlags.StringVar(&cookieFile, "c", "", "Cookies to be used when downloading.")
 	cliFlags.StringVar(&cookieFile, "cookies", "", "Cookies to be used when downloading.")
 	cliFlags.StringVar(&fnameFormat, "o", DefaultFilenameFormat, "Filename output format.")
@@ -746,78 +752,9 @@ func run() int {
 	}
 
 	retcode := 0
-	mergeFile := ""
-	ext := ""
-	ffmpegArgs := make([]string, 0, 12)
-	ffmpegArgs = append(ffmpegArgs,
-		"-hide_banner",
-		"-nostdin",
-		"-loglevel", "fatal",
-		"-stats",
-		"-i", finalAudioFile,
-	)
-
-	if downloadThumbnail && !mkv {
-		ffmpegArgs = append(ffmpegArgs, "-i", finalThumbnail)
-	}
-
-	if mkv {
-		ext = "mkv"
-	} else if audioOnly {
-		ext = "m4a"
-	} else {
-		ext = "mp4"
-	}
-
-	mergeFile = filepath.Join(fdir, fmt.Sprintf("%s.%s", fname, ext))
-
-	if !audioOnly {
-		ffmpegArgs = append(ffmpegArgs, "-i", finalVideoFile)
-		if !mkv {
-			ffmpegArgs = append(ffmpegArgs, "-movflags", "faststart")
-		}
-
-		if downloadThumbnail && !mkv {
-			ffmpegArgs = append(ffmpegArgs,
-				"-map", "0",
-				"-map", "1",
-				"-map", "2",
-			)
-		}
-	}
-
-	ffmpegArgs = append(ffmpegArgs, "-c", "copy")
-	if downloadThumbnail {
-		if mkv {
-			ffmpegArgs = append(ffmpegArgs,
-				"-attach", finalThumbnail,
-				"-metadata:s:t", "filename=cover_land.jpg",
-				"-metadata:s:t", "mimetype=image/jpeg",
-			)
-		} else {
-			ffmpegArgs = append(ffmpegArgs, "-disposition:v:0", "attached_pic")
-		}
-	}
-
-	if addMeta {
-		for k, v := range info.Metadata {
-			if len(v) > 0 {
-				ffmpegArgs = append(ffmpegArgs,
-					"-metadata",
-					fmt.Sprintf("%s=%s", strings.ToUpper(k), v),
-				)
-			}
-		}
-	}
-
-	mergeCounter := 0
-	for Exists(mergeFile) && mergeCounter < 10 {
-		mergeCounter += 1
-		mergeFile = filepath.Join(fdir, fmt.Sprintf("%s-%d.%s", fname, mergeCounter, ext))
-	}
-
-	ffmpegArgs = append(ffmpegArgs, mergeFile)
-	ffmpegCmd := "ffmpeg " + shellescape.QuoteCommand(ffmpegArgs)
+	ffmpegArgs := GetFFmpegArgs(finalAudioFile, finalVideoFile, finalThumbnail, fdir, fname, audioOnly)
+	audioFFMpegArgs := GetFFmpegArgs(finalAudioFile, "", finalThumbnail, fdir, fname, true)
+	ffmpegCmd := "ffmpeg " + shellescape.QuoteCommand(ffmpegArgs.Args)
 
 	if writeMuxCmd {
 		return WriteMuxFile(muxFile, ffmpegCmd)
@@ -838,8 +775,10 @@ func run() int {
 		return 1
 	}
 
-	retcode = Execute("ffmpeg", ffmpegArgs)
-	if retcode != 0 {
+	fmt.Println("Muxing final file...")
+	fRetcode := Execute("ffmpeg", ffmpegArgs.Args)
+	if fRetcode != 0 {
+		retcode = fRetcode
 		wRetcode := WriteMuxFile(muxFile, ffmpegCmd)
 		if wRetcode != 0 {
 			fmt.Println(ffmpegCmd)
@@ -850,6 +789,19 @@ func run() int {
 		LogError("Execute returned code %d. Something must have gone wrong with ffmpeg.", retcode)
 		LogError("The .ts files will not be deleted in case the final file is broken.")
 		LogError("Finally, the ffmpeg command was either written to a file or output above.")
+	}
+
+	if separateAudio {
+		fmt.Println("Creating separate audio file...")
+		aRetcode := Execute("ffmpeg", audioFFMpegArgs.Args)
+		if aRetcode != 0 {
+			retcode = aRetcode
+			LogError("Execute returned code %d. Something must have gone wrong with ffmpeg.", retcode)
+			LogError("The .ts files will not be deleted in case the final file is broken.")
+		}
+	}
+
+	if retcode != 0 {
 		return retcode
 	}
 
@@ -861,7 +813,10 @@ func run() int {
 		os.RemoveAll(tmpDir)
 	}
 
-	fmt.Printf("%[1]sFinal file: %[2]s%[1]s", "\n", mergeFile)
+	fmt.Printf("%[1]sFinal file: %[2]s%[1]s", "\n", ffmpegArgs.FileName)
+	if separateAudio {
+		fmt.Printf("%[1]sFinal audio file: %[2]s%[1]s", "\n", audioFFMpegArgs.FileName)
+	}
 
 	return 0
 }
