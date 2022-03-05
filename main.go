@@ -55,13 +55,16 @@ usage: %[1]s [OPTIONS] [url] [quality]
 	%[2]s
 
 Options:
-	-h, --help
+	-h
+	--help
 		Show this help message.
 
-	-4, --ipv4
+	-4
+	--ipv4
 		Make all connections using IPv4.
 
-	-6, --ipv6
+	-6
+	--ipv6
 		Make all connections using IPv6.
 
 	--add-metadata
@@ -71,13 +74,19 @@ Options:
 		Pass in the given url as the audio fragment url. Must be a
 		Google Video url with an itag parameter of 140.
 
-	-c, --cookies COOKIES_FILE
+	-c
+	--cookies COOKIES_FILE
 		Give a cookies.txt file that has your youtube cookies. Allows
 		the script to access members-only content if you are a member
 		for the given stream's user. Must be netscape cookie format.
 
 	--debug
 		Print a lot of extra information.
+
+	-k
+	--keep-ts-files
+		Keep the final stream audio and video files after muxing them
+		instead of deleting them.
 
 	--merge
 		Automatically run the ffmpeg command for the downloaded streams
@@ -113,16 +122,19 @@ Options:
 		prompt for a video url. If a video url is given with --video-url
 		then this is effectively ignored.
 
-	-n, --no-wait
+	-n
+	--no-wait
 		Do not wait for a livestream if it's a future scheduled stream.
 
-	-o, --output FILENAME_FORMAT
+	-o
+	--output FILENAME_FORMAT
 		Set the output file name EXCLUDING THE EXTENSION. Can include
 		formatting similar to youtube-dl, albeit much more limited.
 		See FORMAT OPTIONS below for a list of available format keys.
 		Default is '%[3]s'
 
-	-r, --retry-stream SECONDS
+	-r
+	--retry-stream SECONDS
 		If waiting for a scheduled livestream, re-check if the stream is
 		up every SECONDS instead of waiting for the initial scheduled time.
 		If SECONDS is less than the poll delay youtube gives (typically
@@ -143,7 +155,8 @@ Options:
 		to start failing with HTTP 401. Restarting the download with a smaller
 		thread count until you no longer get 401s should work. Default is 1.
 
-	-t, --thumbnail
+	-t
+	--thumbnail
 		Download and embed the stream thumbnail in the finished file.
 		Whether the thumbnail shows properly depends on your file browser.
 		Windows' seems to work. Nemo on Linux seemingly does not.
@@ -152,10 +165,12 @@ Options:
 		Print just about any information that might have reason to be printed.
 		Very spammy, do not use this unless you have good reason.
 
-	-v, --verbose
+	-v
+	--verbose
 		Print extra information.
 
-	-V, --version
+	-V
+	--version
 		Print the version number and exit.
 
 	--video-url GOOGLEVIDEO_URL
@@ -166,7 +181,8 @@ Options:
 		If there is a VP9 version of your selected video quality,
 		download that instead of the usual h264.
 
-	-w, --wait
+	-w
+	--wait
 		Wait for a livestream if it's a future scheduled stream.
 		If this option is not used when a scheduled stream is provided,
 		you will be asked if you want to wait or not.
@@ -184,12 +200,40 @@ Options:
 
 Examples:
 	%[1]s -w
+		Waits for a stream. Will prompt for a URL and quality.
+
 	%[1]s -w https://www.youtube.com/watch?v=CnWDmKx9cQQ 1080p60/best
+		Waits for the given stream URL. Will prioritize downloading in 1080p60.
+		If 1080p60 is not an available quality, it will choose the best of what
+		is available.
+
 	%[1]s --threads 3 https://www.youtube.com/watch?v=ZK1GXnz-1Lw best
-	%[1]s --wait -r 30 https://www.youtube.com/channel/UCZlDXzGoo7d44bwdNObFacg/live best
+		Downloads the given stream with 3 threads in the best available quality.
+		Will ask if you want to wait if the stream is scheduled but not started.
+
+	%[1]s -r 30 https://www.youtube.com/channel/UCZlDXzGoo7d44bwdNObFacg/live best
+		Will wait for a livestream at the given URL, checking every 30 seconds.
+
 	%[1]s -c cookies-youtube-com.txt https://www.youtube.com/watch?v=_touw1GND-M best
+		Loads the given cookies file and attempts to download the given stream.
+		Will ask if you want to wait.
+
 	%[1]s --no-wait --add-metadata https://www.youtube.com/channel/UCvaTdHTWBGv3MKj3KVqJVCw/live best
+		Attempts to download the given stream, and will add metadata to the
+		final muxed file. Will not wait if there is no stream or if it has not
+		started.
+
 	%[1]s -o '%%(channel)s/%%(upload_date)s_%%(title)s' https://www.youtube.com/watch?v=HxV9UAMN12o best
+		Download the given stream to a directory with the channel name, and a
+		file that will have the upload date and stream title. Will prompt to
+		wait.
+
+	%[1]s -w -k -t --vp9 --merge --no-frag-files https://www.youtube.com/watch?v=LE8V5iNemBA best
+		Waits, keeps the final .ts files, embeds the stream thumbnail, merges
+		the downloaded files if download is stopped manually, and keeps
+		fragments in memory instead of writing to intermediate files.
+		Downloads the stream video in VP9 if available. This set of flags will
+		not require any extra user input if something goes wrong.
 
 
 FORMAT TEMPLATE OPTIONS
@@ -245,6 +289,7 @@ var (
 	audioOnly         bool
 	mkv               bool
 	statusNewlines    bool
+	keepTSFiles       bool
 )
 
 func init() {
@@ -282,6 +327,8 @@ func init() {
 	cliFlags.BoolVar(&forceIPv6, "ipv6", false, "Force IPv6 connections.")
 	cliFlags.BoolVar(&mkv, "mkv", false, "Make the final container mkv (ignored when audio only).")
 	cliFlags.BoolVar(&statusNewlines, "newline", false, "Write progress to a new line instead of keeping it on one line.")
+	cliFlags.BoolVar(&keepTSFiles, "k", false, "Keep the raw .ts files instead of deleting them after muxing.")
+	cliFlags.BoolVar(&keepTSFiles, "keep-ts-files", false, "Keep the raw .ts files instead of deleting them after muxing.")
 	cliFlags.StringVar(&cookieFile, "c", "", "Cookies to be used when downloading.")
 	cliFlags.StringVar(&cookieFile, "cookies", "", "Cookies to be used when downloading.")
 	cliFlags.StringVar(&fnameFormat, "o", DefaultFilenameFormat, "Filename output format.")
@@ -691,7 +738,9 @@ func run() int {
 	}
 
 	filesToDel := make([]string, 0, 3)
-	filesToDel = append(filesToDel, finalAudioFile, finalVideoFile)
+	if !keepTSFiles {
+		filesToDel = append(filesToDel, finalAudioFile, finalVideoFile)
+	}
 	if !writeThumbnail {
 		filesToDel = append(filesToDel, finalThumbnail)
 	}
