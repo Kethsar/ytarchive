@@ -102,11 +102,24 @@ Options:
 		Mux the final file into an mkv container instead of an mp4 container.
 		Ignored when downloading audio only.
 
+	--monitor-channel
+		Continually monitor a channel for streams. Requires using a /live URL.
+		This will go back to checking for a stream after it finishes downloading
+		the current one. Implies '-r 60 --merge' unless set separately. Minimum
+		30 second wait time, 60 or more recommended. Using 'best' for quality or
+		setting a decently exhaustive list recommended to prevent waiting for
+		input if selected quality is not available for certain streams.
+		Be careful to monitor your disk usage when using this to avoid filling
+		your drive while away.
+
 	--no-frag-files
 		Keep fragment data in memory instead of writing to an intermediate file.
 		This has the possibility to drastically increase RAM usage if a fragment
 		downloads particularly slowly as more fragments after it finish first.
 		This is only an issue when --threads >1
+		Highly recommended if you don't have strict RAM limitations. Especially
+		on Wangblows, which has caused issues with file locking when trying to
+		delete fragment files.
 
 	--no-merge
 		Do not run the ffmpeg command for the downloaded streams
@@ -239,6 +252,9 @@ Examples:
 		Downloads the stream video in VP9 if available. This set of flags will
 		not require any extra user input if something goes wrong.
 
+	%[1]s -k -t --vp9 --monitor-channel --no-frag-files https://www.youtube.com/channel/UCvaTdHTWBGv3MKj3KVqJVCw/live best
+		Same as above, but waits for a stream on the given channel, and will
+		repeat the cycle after downloading each stream.
 
 FORMAT TEMPLATE OPTIONS
 	Format template keys provided are made to be the same as they would be for
@@ -295,6 +311,9 @@ var (
 	statusNewlines    bool
 	keepTSFiles       bool
 	separateAudio     bool
+	monitorChannel    bool
+
+	cancelled = false
 )
 
 func init() {
@@ -335,6 +354,7 @@ func init() {
 	cliFlags.BoolVar(&keepTSFiles, "k", false, "Keep the raw .ts files instead of deleting them after muxing.")
 	cliFlags.BoolVar(&keepTSFiles, "keep-ts-files", false, "Keep the raw .ts files instead of deleting them after muxing.")
 	cliFlags.BoolVar(&separateAudio, "separate-audio", false, "Save a copy of the audio separately along with the muxed file.")
+	cliFlags.BoolVar(&monitorChannel, "monitor-channel", false, "Continually monitor a channel for streams.")
 	cliFlags.StringVar(&cookieFile, "c", "", "Cookies to be used when downloading.")
 	cliFlags.StringVar(&cookieFile, "cookies", "", "Cookies to be used when downloading.")
 	cliFlags.StringVar(&fnameFormat, "o", DefaultFilenameFormat, "Filename output format.")
@@ -382,33 +402,11 @@ func init() {
 // ehh, bad way to do this probably but allows deferred functions to run
 // while also allowing early return with a non-0 exit code.
 func run() int {
-	PrintVersion()
-	cliFlags.Parse(os.Args[1:])
-	colorable.EnableColorsStdout(nil)
-
-	if showHelp {
-		PrintHelp()
-		return 1
-	}
-
-	if showVersion {
-		return 0
-	}
-
+	info = NewDownloadInfo()
 	mergeOnCancel := ActionAsk
 	saveOnCancel := ActionAsk
 	var moveErrs []error
-
-	if trace {
-		loglevel = LoglevelTrace
-		verbose = true
-	} else if debug {
-		loglevel = LoglevelDebug
-		verbose = true
-	} else if verbose {
-		loglevel = LogleveInfo
-	}
-	log.SetPrefix("\r")
+	cliFlags.Parse(os.Args[1:])
 
 	if doWait {
 		info.Wait = ActionDo
@@ -432,12 +430,6 @@ func run() int {
 		info.Quality = AudioOnlyQuality
 	}
 
-	if forceIPv4 {
-		networkType = NetworkIPv4
-	} else if forceIPv6 {
-		networkType = NetworkIPv6
-	}
-
 	if noFragFiles {
 		info.FragFiles = false
 	}
@@ -448,6 +440,15 @@ func run() int {
 
 	if threadCount > 1 {
 		info.Jobs = int(threadCount)
+	}
+
+	if monitorChannel {
+		if info.RetrySecs < MinimumMonitorTime {
+			info.RetrySecs = DefaultMonitorTime
+		}
+		if !noMerge {
+			doMerge = true
+		}
 	}
 
 	if len(gvVideoUrl) > 0 {
@@ -652,6 +653,7 @@ func run() int {
 		case <-sigChan:
 			signal.Reset(os.Interrupt)
 			info.Stop()
+			cancelled = true
 			fmt.Println()
 			LogWarn("User Interrupt, Stopping download...")
 
@@ -822,5 +824,43 @@ func run() int {
 }
 
 func main() {
-	os.Exit(run())
+	PrintVersion()
+	cliFlags.Parse(os.Args[1:])
+	colorable.EnableColorsStdout(nil)
+	retcode := 0
+
+	if showHelp {
+		PrintHelp()
+		os.Exit(retcode)
+	}
+
+	if showVersion {
+		os.Exit(retcode)
+	}
+
+	if trace {
+		loglevel = LoglevelTrace
+		verbose = true
+	} else if debug {
+		loglevel = LoglevelDebug
+		verbose = true
+	} else if verbose {
+		loglevel = LogleveInfo
+	}
+	log.SetPrefix("\r")
+
+	if forceIPv4 {
+		networkType = NetworkIPv4
+	} else if forceIPv6 {
+		networkType = NetworkIPv6
+	}
+
+	for {
+		retcode = run()
+		if cancelled || !monitorChannel || !info.LiveURL {
+			break
+		}
+	}
+
+	os.Exit(retcode)
 }

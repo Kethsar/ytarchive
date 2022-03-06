@@ -249,7 +249,8 @@ func (di *DownloadInfo) GetPlayerResponse(videoHtml []byte) (*PlayerResponse, er
 
 func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerResponse, selectedQualities []string) {
 	firstWait := true
-	waitOnLiveURL := di.LiveURL && di.RetrySecs > 0
+	isLiveURL := di.LiveURL
+	waitOnLiveURL := isLiveURL && di.RetrySecs > 0
 	liveWaited := 0
 	var secsLate int
 	var err error
@@ -423,9 +424,9 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 
 		case PlayableOk:
 			// player response returned from /live does not include full information
-			if di.LiveURL {
+			if isLiveURL {
 				di.URL = fmt.Sprintf("https://www.youtube.com/watch?v=%s", di.VideoID)
-				di.LiveURL = false
+				isLiveURL = false
 				continue
 			}
 
