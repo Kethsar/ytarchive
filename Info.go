@@ -445,9 +445,20 @@ func (di *DownloadInfo) ParseInputUrl() error {
 
 			di.VideoID = parsedQuery.Get("v")
 			return nil
-		} else if strings.HasPrefix(lowerPath, "/channel") && strings.HasSuffix(lowerPath, "live") {
+		} else if strings.HasPrefix(lowerPath, "/channel/") || strings.HasPrefix(lowerPath, "/c/") {
 			// The URL can be polled and the stream can change depending on what
 			// the channel schedules. Useful for set-and-forget
+			chanSlashIdx := strings.Index(lowerPath[1:], "/") + 1
+			noChanPath := lowerPath[chanSlashIdx:]
+
+			// Check if we were given the channel url on a sub page
+			// Remove that part from the URL so we can append /live to it after
+			if strings.LastIndex(noChanPath, "/") > 0 {
+				lastSlash := strings.LastIndex(di.URL, "/")
+				di.URL = di.URL[:lastSlash]
+			}
+
+			di.URL = fmt.Sprintf("%s/live", di.URL)
 			di.LiveURL = true
 			return nil
 		}
