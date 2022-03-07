@@ -629,7 +629,7 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 
 		for !found {
 			if len(selQaulities) == 0 {
-				selQaulities = GetQualityFromUser(qualities, false)
+				selQaulities = GetQualityFromUser(qualities, false, pr.VideoDetails.Title)
 			}
 
 			for _, q := range selQaulities {

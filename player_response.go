@@ -352,7 +352,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 			if firstWait {
 				fmt.Println()
 				if len(selectedQualities) < 1 {
-					selectedQualities = GetQualityFromUser(VideoQualities, true)
+					selectedQualities = GetQualityFromUser(VideoQualities, true, pr.VideoDetails.Title)
 				}
 			}
 

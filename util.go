@@ -343,7 +343,7 @@ func ParseQualitySelection(formats []string, quality string) []string {
 }
 
 // Prompt the user to select a video quality
-func GetQualityFromUser(formats []string, waiting bool) []string {
+func GetQualityFromUser(formats []string, waiting bool, title string) []string {
 	var selQualities []string
 	qualities := MakeQualityList(formats)
 
@@ -355,6 +355,7 @@ func GetQualityFromUser(formats []string, waiting bool) []string {
 		)
 	}
 
+	fmt.Printf("Video Title: %s\n", title)
 	fmt.Printf("Available video qualities: %s\n", qualities)
 
 	for len(selQualities) < 1 {
