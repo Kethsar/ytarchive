@@ -149,6 +149,8 @@ type DownloadInfo struct {
 	GVideoDDL   bool
 	FragFiles   bool
 	LiveURL     bool
+	AudioOnly   bool
+	VideoOnly   bool
 
 	Thumbnail       string
 	VideoID         string
@@ -399,12 +401,7 @@ func (di *DownloadInfo) GetGvideoUrl(dataType string) {
 	for {
 		gvUrl := GetUserInput(fmt.Sprintf("Please enter the %s url, or nothing to skip: ", dataType))
 		if len(gvUrl) == 0 {
-			if dataType != DtypeAudio {
-				return
-			} else {
-				fmt.Println("Audio URL must be given. Video-only downloading is not supported at this time.")
-				continue
-			}
+			return
 		}
 
 		newUrl, itag := ParseGvideoUrl(gvUrl, dataType)
@@ -471,7 +468,10 @@ func (di *DownloadInfo) ParseInputUrl() error {
 		}
 
 		di.GVideoDDL = true
-		di.VideoID = strings.TrimSuffix(parsedQuery.Get("id"), ".1")
+		id := parsedQuery.Get("id")
+		dotIdx := strings.LastIndex(id, ".")
+		id = id[:dotIdx]
+		di.VideoID = id
 		di.FormatInfo["id"] = di.VideoID
 		sqIdx := strings.Index(di.URL, "&sq=")
 		itag, err := strconv.Atoi(parsedQuery.Get("itag"))
@@ -489,7 +489,7 @@ func (di *DownloadInfo) ParseInputUrl() error {
 				di.SetDownloadUrl(DtypeAudio, di.URL[:sqIdx]+"&sq=%d")
 			}
 
-			if len(di.GetDownloadUrl(DtypeVideo)) == 0 && di.Quality < 0 {
+			if len(di.GetDownloadUrl(DtypeVideo)) == 0 && !di.AudioOnly {
 				di.GetGvideoUrl(DtypeVideo)
 			}
 		} else {
@@ -497,7 +497,7 @@ func (di *DownloadInfo) ParseInputUrl() error {
 				di.SetDownloadUrl(DtypeVideo, di.URL[:sqIdx]+"&sq=%d")
 			}
 
-			if len(di.GetDownloadUrl(DtypeAudio)) == 0 {
+			if len(di.GetDownloadUrl(DtypeAudio)) == 0 && !di.VideoOnly {
 				di.GetGvideoUrl(DtypeAudio)
 			}
 		}
@@ -641,7 +641,10 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 
 				videoItag := VideoLabelItags[q]
 				aonly := videoItag.VP9 == AudioOnlyQuality
-				di.SetDownloadUrl(DtypeAudio, dlUrls[AudioItag])
+
+				if !di.VideoOnly {
+					di.SetDownloadUrl(DtypeAudio, dlUrls[AudioItag])
+				}
 
 				if aonly {
 					di.Quality = AudioOnlyQuality
@@ -684,7 +687,7 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 		aonly := di.Quality == AudioOnlyQuality
 		_, audioOk := dlUrls[AudioItag]
 
-		if audioOk && IsFragmented(dlUrls[AudioItag]) {
+		if !di.VideoOnly && audioOk && IsFragmented(dlUrls[AudioItag]) {
 			di.SetDownloadUrl(DtypeAudio, dlUrls[AudioItag])
 		}
 

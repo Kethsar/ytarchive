@@ -809,7 +809,7 @@ func WriteMuxFile(muxFile, ffmpegCmd string) int {
 	return 0
 }
 
-func GetFFmpegArgs(audioFile, videoFile, thumbnail, fileDir, fileName string, onlyAudio bool) FFMpegArgs {
+func GetFFmpegArgs(audioFile, videoFile, thumbnail, fileDir, fileName string, onlyAudio, onlyVideo bool) FFMpegArgs {
 	mergeFile := ""
 	ext := ""
 	ffmpegArgs := make([]string, 0, 12)
@@ -818,7 +818,6 @@ func GetFFmpegArgs(audioFile, videoFile, thumbnail, fileDir, fileName string, on
 		"-nostdin",
 		"-loglevel", "fatal",
 		"-stats",
-		"-i", audioFile,
 	)
 
 	if downloadThumbnail && !mkv {
@@ -840,6 +839,10 @@ func GetFFmpegArgs(audioFile, videoFile, thumbnail, fileDir, fileName string, on
 		mergeFile = filepath.Join(fileDir, fmt.Sprintf("%s-%d.%s", fileName, mergeCounter, ext))
 	}
 
+	if !onlyVideo {
+		ffmpegArgs = append(ffmpegArgs, "-i", audioFile)
+	}
+
 	if !onlyAudio {
 		ffmpegArgs = append(ffmpegArgs, "-i", videoFile)
 		if !mkv {
@@ -850,8 +853,11 @@ func GetFFmpegArgs(audioFile, videoFile, thumbnail, fileDir, fileName string, on
 			ffmpegArgs = append(ffmpegArgs,
 				"-map", "0",
 				"-map", "1",
-				"-map", "2",
 			)
+
+			if !onlyVideo {
+				ffmpegArgs = append(ffmpegArgs, "-map", "2")
+			}
 		}
 	}
 

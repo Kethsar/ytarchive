@@ -112,6 +112,9 @@ Options:
 		Be careful to monitor your disk usage when using this to avoid filling
 		your drive while away.
 
+	--no-audio
+		Do not download the audio stream
+
 	--no-frag-files
 		Keep fragment data in memory instead of writing to an intermediate file.
 		This has the possibility to drastically increase RAM usage if a fragment
@@ -307,6 +310,7 @@ var (
 	doSave            bool
 	noSave            bool
 	audioOnly         bool
+	videoOnly         bool
 	mkv               bool
 	statusNewlines    bool
 	keepTSFiles       bool
@@ -333,6 +337,7 @@ func init() {
 	cliFlags.BoolVar(&doSave, "save", false, "Auto save files on cancelled download.")
 	cliFlags.BoolVar(&noSave, "no-save", false, "Delete all files on cancelled download.")
 	cliFlags.BoolVar(&audioOnly, "no-video", false, "Only download the audio stream.")
+	cliFlags.BoolVar(&videoOnly, "no-audio", false, "Only download the video stream.")
 	cliFlags.BoolVar(&noFragFiles, "no-frag-files", false, "Keep fragments in memory while waiting to write to the main file.")
 	cliFlags.BoolVar(&downloadThumbnail, "t", false, "Embed thumbnail into final file.")
 	cliFlags.BoolVar(&downloadThumbnail, "thumbnail", false, "Embed thumbnail into final file.")
@@ -428,6 +433,11 @@ func run() int {
 
 	if audioOnly {
 		info.Quality = AudioOnlyQuality
+		info.AudioOnly = true
+	}
+
+	if videoOnly {
+		info.VideoOnly = true
 	}
 
 	if noFragFiles {
@@ -607,9 +617,11 @@ func run() int {
 	dlDoneChan := make(chan struct{}, 2)
 	activeDownloads := 0
 
-	LogInfo("Starting download to %s", afile)
-	go info.DownloadStream(DtypeAudio, afile, progressChan, dlDoneChan)
-	activeDownloads += 1
+	if len(info.GetDownloadUrl(DtypeAudio)) > 0 {
+		LogInfo("Starting download to %s", afile)
+		go info.DownloadStream(DtypeAudio, afile, progressChan, dlDoneChan)
+		activeDownloads += 1
+	}
 
 	if len(info.GetDownloadUrl(DtypeVideo)) > 0 {
 		LogInfo("Starting download to %s", vfile)
@@ -617,12 +629,20 @@ func run() int {
 		activeDownloads += 1
 	}
 
+	if activeDownloads == 0 {
+		LogError("Neither audio nor video downloads were started.")
+		LogError("Make sure you did not have both --no-video and --no-audio set.")
+		if tmpDir != fdir {
+			os.RemoveAll(tmpDir)
+		}
+		return 1
+	}
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt)
 
 	maxSeq := -1
 	for {
-
 		select {
 		case progress := <-progressChan:
 			totalBytes += int64(progress.ByteCount)
@@ -727,7 +747,7 @@ func run() int {
 	fmt.Println("\nDownload Finished")
 
 	audioOnly = info.Quality == AudioOnlyQuality
-	if !audioOnly && frags[DtypeAudio] != frags[DtypeVideo] {
+	if !audioOnly && !videoOnly && frags[DtypeAudio] != frags[DtypeVideo] {
 		LogWarn("Mismatched number of video and audio fragments.")
 		LogWarn("The files should still be mergable but data might be missing.")
 	}
@@ -754,8 +774,8 @@ func run() int {
 	}
 
 	retcode := 0
-	ffmpegArgs := GetFFmpegArgs(finalAudioFile, finalVideoFile, finalThumbnail, fdir, fname, audioOnly)
-	audioFFMpegArgs := GetFFmpegArgs(finalAudioFile, "", finalThumbnail, fdir, fname, true)
+	ffmpegArgs := GetFFmpegArgs(finalAudioFile, finalVideoFile, finalThumbnail, fdir, fname, audioOnly, videoOnly)
+	audioFFMpegArgs := GetFFmpegArgs(finalAudioFile, "", finalThumbnail, fdir, fname, true, false)
 	ffmpegCmd := "ffmpeg " + shellescape.QuoteCommand(ffmpegArgs.Args)
 
 	if writeMuxCmd {
@@ -803,17 +823,17 @@ func run() int {
 		}
 	}
 
-	if retcode != 0 {
-		return retcode
-	}
-
-	CleanupFiles(filesToDel)
-
 	if !movesOk {
 		LogError("At least one error occurred when moving files. Will not delete them.")
 	} else if tmpDir != fdir {
 		os.RemoveAll(tmpDir)
 	}
+
+	if retcode != 0 {
+		return retcode
+	}
+
+	CleanupFiles(filesToDel)
 
 	fmt.Printf("%[1]sFinal file: %[2]s%[1]s", "\n", ffmpegArgs.FileName)
 	if separateAudio {
