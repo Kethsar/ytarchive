@@ -290,6 +290,7 @@ var (
 	gvAudioUrl        string
 	gvVideoUrl        string
 	threadCount       uint
+	retrySecs         int
 	downloadThumbnail bool
 	addMeta           bool
 	writeDesc         bool
@@ -316,6 +317,7 @@ var (
 	keepTSFiles       bool
 	separateAudio     bool
 	monitorChannel    bool
+	vp9               bool
 
 	cancelled = false
 )
@@ -345,7 +347,7 @@ func init() {
 	cliFlags.BoolVar(&verbose, "verbose", false, "Verbose logging output.")
 	cliFlags.BoolVar(&debug, "debug", false, "Debug logging output.")
 	cliFlags.BoolVar(&trace, "trace", false, "Trace logging output.")
-	cliFlags.BoolVar(&info.VP9, "vp9", false, "Download VP9 video if available.")
+	cliFlags.BoolVar(&vp9, "vp9", false, "Download VP9 video if available.")
 	cliFlags.BoolVar(&addMeta, "add-metadata", false, "Write metadata to the final file.")
 	cliFlags.BoolVar(&writeDesc, "write-description", false, "Write description to a separate file.")
 	cliFlags.BoolVar(&writeThumbnail, "write-thumbnail", false, "Write thumbnail to a separate file.")
@@ -364,8 +366,8 @@ func init() {
 	cliFlags.StringVar(&cookieFile, "cookies", "", "Cookies to be used when downloading.")
 	cliFlags.StringVar(&fnameFormat, "o", DefaultFilenameFormat, "Filename output format.")
 	cliFlags.StringVar(&fnameFormat, "output", DefaultFilenameFormat, "Filename output format.")
-	cliFlags.IntVar(&info.RetrySecs, "r", 0, "Seconds to wait between checking stream status.")
-	cliFlags.IntVar(&info.RetrySecs, "retry-stream", 0, "Seconds to wait between checking stream status.")
+	cliFlags.IntVar(&retrySecs, "r", 0, "Seconds to wait between checking stream status.")
+	cliFlags.IntVar(&retrySecs, "retry-stream", 0, "Seconds to wait between checking stream status.")
 	cliFlags.UintVar(&threadCount, "threads", 1, "Number of download threads for each stream type.")
 
 	cliFlags.Func("video-url", "Googlevideo URL for the video stream.", func(s string) error {
@@ -412,6 +414,9 @@ func run() int {
 	saveOnCancel := ActionAsk
 	var moveErrs []error
 	cliFlags.Parse(os.Args[1:])
+
+	info.VP9 = vp9
+	info.RetrySecs = retrySecs
 
 	if doWait {
 		info.Wait = ActionDo
