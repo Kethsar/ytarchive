@@ -544,7 +544,7 @@ func ContinueFragmentDownload(di *DownloadInfo, state *fragThreadState) bool {
 			di.GetVideoInfo()
 		}
 
-		if !di.IsLive() {
+		if !di.IsLive() || di.IsUnavailable() {
 			if state.Is403 {
 				if di.IsUnavailable() {
 					LogWarn("%s: Download link likely expired and stream is privated or members only, cannot coninue download", state.Name)
