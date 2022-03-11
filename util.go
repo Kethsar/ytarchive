@@ -85,14 +85,7 @@ var (
 		Timeout:   10 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}
-	tr = &http.Transport{
-		DialContext:           DialContextOverride,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
-	}
-	client = &http.Client{
-		Transport: tr,
-	}
+	client = DefaultClient()
 )
 
 var fnameReplacer = strings.NewReplacer(
@@ -164,6 +157,16 @@ func LogTrace(format string, args ...interface{}) {
 
 func DialContextOverride(ctx context.Context, network, addr string) (net.Conn, error) {
 	return networkOverrideDialer.DialContext(ctx, networkType, addr)
+}
+
+func DefaultClient() *http.Client {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.DialContext = DialContextOverride
+	tr.ResponseHeaderTimeout = 10 * time.Second
+
+	return &http.Client{
+		Transport: tr,
+	}
 }
 
 // Remove any illegal filename chars
