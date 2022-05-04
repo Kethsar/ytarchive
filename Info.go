@@ -907,7 +907,6 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 	seqChan := make(chan *seqChanInfo, di.Jobs*2)
 	closed := false
 	curFrag := 0
-	curSeq := 0
 	activeDownloads := 0
 	maxSeqs := -1
 	tries := 10
@@ -922,9 +921,13 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 
 	if di.FragmentDur >= 0 && di.LastSq >= 0 {
 		curFrag = di.LastSq - LiveMaximumSeekable / di.FragmentDur
-		curSeq = curFrag
-		LogWarn("%s: YT only retains the livestream 5 days past for seeking, starting from sequence %d (latest is %d)", dataType, curFrag, di.LastSq)
 	}
+	if curFrag > 0 {
+		LogWarn("%s: YT only retains the livestream 5 days past for seeking, starting from sequence %d (latest is %d)", dataType, curFrag, di.LastSq)
+	} else {
+		curFrag = 0
+	}
+	curSeq := curFrag
 	startFrag := curFrag
 
 	if err != nil {
