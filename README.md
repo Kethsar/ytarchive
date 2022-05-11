@@ -11,7 +11,7 @@ Run `go install github.com/Kethsar/ytarchive@master`
 
 `@master` is required because of some bullshit caching Go package proxies do. Should have used Rust...
 
-Alternatively, download the latest pre-release from [the releases page](github.com/Kethsar/ytarchive)
+Alternatively, download the latest pre-release from [the releases page](https://github.com/Kethsar/ytarchive/releases)
 
 # Usage
 
