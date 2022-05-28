@@ -7,11 +7,11 @@ A [WebUI front-end](https://github.com/lekoOwO/ytarchive-ui) was created by leko
 - [FFmpeg](https://ffmpeg.org/) needs to be installed to mux the final file.
 
 # Installation
-Run `go install github.com/Kethsar/ytarchive@master`
+Download the latest pre-release from [the releases page](https://github.com/Kethsar/ytarchive/releases)
+
+Alternatively, if you have Go properly installed and set up, run `go install github.com/Kethsar/ytarchive@master`
 
 `@master` is required because of some bullshit caching Go package proxies do. Should have used Rust...
-
-Alternatively, download the latest pre-release from [the releases page](https://github.com/Kethsar/ytarchive/releases)
 
 # Usage
 
