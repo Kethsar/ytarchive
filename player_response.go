@@ -139,7 +139,7 @@ func GetPlayerResponseFromHtml(data []byte) []byte {
 				// Maybe add a LogTrace in the future for stuff like this
 				//LogDebug("Found script element with player response in watch page.")
 				objStart := bytes.Index(data[declStart:], []byte("{")) + declStart
-				objEnd := bytes.Index(data[objStart:], []byte("};")) + 1 + objStart
+				objEnd := bytes.LastIndex(data[objStart:], []byte("};")) + 1 + objStart
 
 				if objEnd > objStart {
 					objData = data[objStart:objEnd]
