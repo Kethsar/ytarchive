@@ -7,11 +7,22 @@ A [WebUI front-end](https://github.com/lekoOwO/ytarchive-ui) was created by leko
 - [FFmpeg](https://ffmpeg.org/) needs to be installed to mux the final file.
 
 # Installation
+## Bare Metal
 Download the latest pre-release from [the releases page](https://github.com/Kethsar/ytarchive/releases)
 
 Alternatively, if you have Go properly installed and set up, run `go install github.com/Kethsar/ytarchive@master`
 
 `@master` is required because of some bullshit caching Go package proxies do. Should have used Rust...
+
+## Docker
+
+Clone the repo and run `docker build -t ytarchiver .` inside.
+
+Or use the image from [hub.docker.com](https://hub.docker.com/r/z0pyrus/ytarchiver) (`docker pull z0pyrus/ytarchiver`)
+
+To run the Docker Container use `docker run -it --name ytarcher /home/user/ytarchiver:/app z0pyrus/ytarchiver 'options' 'youtube url' 'quality'`. Use for `/home/user/ytarchiver` your path where the videoes will be saved.
+
+For example `docker run -it --name ytarcher /home/user/ytarchiver:/app z0pyrus/ytarchiver '--debug' '--channel-monitor' '-r' '180' 'https://youtube.com/channel/ouhKjb89klbhjH' 'best'`
 
 # Usage
 
