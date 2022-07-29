@@ -519,7 +519,7 @@ func run() int {
 
 	// We checked if there would be errors earlier, should be good
 	fullFPath, _ := FormatFilename(fnameFormat, info.FormatInfo)
-	fdir := filepath.Dir(fullFPath)
+	fdir := filepath.Dir(fullFPath) + "/downloads"
 	var tmpDir string
 	var absDir string
 

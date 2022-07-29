@@ -4,19 +4,18 @@ WORKDIR /go/src
 
 COPY . .
 
-RUN go build -o /go/bin/ytarchiver
-
-WORKDIR /app
-
-RUN apt-get -y update
-RUN apt-get install -y ffmpeg
+RUN go build -o ytarchiver
 
 FROM golang:1.16
 
 WORKDIR /app
 
-VOLUME /app
+COPY --from=build-env /go/src/ytarchiver ./
 
-COPY --from=build-env ./go/bin/ytarchiver .
+RUN apt-get -y update && \
+    apt-get install -y ffmpeg
 
-ENTRYPOINT ["/app/ytarchiver"]
+RUN mkdir /app/downloads
+VOLUME /app/downloads
+
+ENTRYPOINT [ "/app/ytarchiver" ]
