@@ -20,9 +20,9 @@ Clone the repo and run `docker build -t ytarchiver .` inside.
 
 Or use the image from [hub.docker.com](https://hub.docker.com/r/z0pyrus/ytarchiver) (`docker pull z0pyrus/ytarchiver`)
 
-To run the Docker Container use `docker run -it --name ytarcher /home/user/ytarchiver:/app z0pyrus/ytarchiver 'options' 'youtube url' 'quality'`. Use for `/home/user/ytarchiver` your path where the videoes will be saved.
+To run the Docker Container use `docker run -it --name ytarchiver -v /home/user/ytarchiver:/app z0pyrus/ytarchiver 'options' 'youtube url' 'quality'`. Use for `/home/user/ytarchiver` your path where the videoes will be saved.
 
-For example `docker run -it --name ytarcher /home/user/ytarchiver:/app z0pyrus/ytarchiver '--debug' '--channel-monitor' '-r' '180' 'https://youtube.com/channel/ouhKjb89klbhjH' 'best'`
+For example `docker run -it --name ytarchiver -v /home/user/ytarchiver:/app z0pyrus/ytarchiver '--debug' '--channel-monitor' '-r' '180' 'https://youtube.com/channel/ouhKjb89klbhjH' 'best'`
 
 # Usage
 
