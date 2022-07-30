@@ -1,0 +1,25 @@
+FROM golang:1.16 AS build-env
+
+WORKDIR /go/src
+
+COPY . .
+
+RUN GOOS=linux GOARCH=arm go build -o ytarchiver
+
+FROM golang:1.16
+
+WORKDIR /app
+
+COPY --from=build-env /go/src/ytarchiver ./
+
+RUN dpkg --add-architecture armhf
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive \
+    apt-get install --no-install-recommends --assume-yes \
+      ffmpeg:armhf
+
+
+RUN mkdir /app/downloads
+VOLUME /app/downloads
+
+ENTRYPOINT [ "/app/ytarchiver" ]
