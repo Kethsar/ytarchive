@@ -1,19 +1,28 @@
 # ytarchive
+
 Attempt to archive a given Youtube livestream from the start. This is most useful for streams that have already started and you want to download, but can also be used to wait for a scheduled stream and start downloading as soon as it starts. If you want to download a VOD, I recommend [yt-dlp](https://github.com/yt-dlp/yt-dlp), which is an actively maintained fork of youtube-dl with more features.
 
 A [WebUI front-end](https://github.com/lekoOwO/ytarchive-ui) was created by leko, if that's something you want. Note that I do not use this myself and cannot comment on how well it works or looks, but it could be useful if you want to set up downloading on a remote server, or make a service out of it.
 
-# Dependencies
+## Dependencies
+
 - [FFmpeg](https://ffmpeg.org/) needs to be installed to mux the final file.
 
-# Installation
+## Installation
+
 Download the latest pre-release from [the releases page](https://github.com/Kethsar/ytarchive/releases)
+
+If you use [Homebrew](https://brew.sh), you can install it by running
+
+```shell
+brew install danirukun/ytarchive/ytarchive
+```
 
 Alternatively, if you have Go properly installed and set up, run `go install github.com/Kethsar/ytarchive@master`
 
 `@master` is required because of some bullshit caching Go package proxies do. Should have used Rust...
 
-# Usage
+## Usage
 
 ```
 usage: ytarchive [OPTIONS] [url] [quality]
