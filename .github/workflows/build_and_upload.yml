@@ -19,11 +19,14 @@ jobs:
       - name: version
         run: echo "::set-output name=version::$(./ytarchive -V)"
         id: version
+      - name: tag
+        run: echo "::set-output name=tag::$(git rev-parse --short HEAD)"
+        id: tag
       - name: release
         uses: marvinpinto/action-automatic-releases@latest
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          automatic_release_tag: $(git rev-parse --short HEAD)
+          automatic_release_tag: ${{ steps.tag.outputs.tag }}
           prerelease: true
           title: ${{ steps.version.outputs.version }}
           files: |
