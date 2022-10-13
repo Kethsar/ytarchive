@@ -852,6 +852,7 @@ func main() {
 	PrintVersion()
 	cliFlags.Parse(os.Args[1:])
 	colorable.EnableColorsStdout(nil)
+	log.SetOutput(colorable.NewColorableStderr())
 	retcode := 0
 
 	if showHelp {
