@@ -25,7 +25,7 @@ jobs:
         uses: marvinpinto/action-automatic-releases@latest
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          prerelease: true
+          prerelease: false
           title: ${{ steps.version.outputs.version }}
           files: |
             ytarchive_linux_amd64.zip
