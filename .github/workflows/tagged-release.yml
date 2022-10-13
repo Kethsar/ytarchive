@@ -1,8 +1,10 @@
 name: build and upload
 on:
   push:
-    branches:
-      - "master"
+    tags:
+      - "v*"
+    branches-ignore:
+      - "dev"
 
 jobs:
   build_upload:
@@ -23,7 +25,6 @@ jobs:
         uses: marvinpinto/action-automatic-releases@latest
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          automatic_release_tag: latest
           prerelease: true
           title: ${{ steps.version.outputs.version }}
           files: |
