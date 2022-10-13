@@ -23,8 +23,8 @@ const (
 	AudioOnlyQuality      = 0
 	BufferSize            = 8192
 	DefaultFilenameFormat = "%(title)s-%(id)s"
-	// 5 days in milliseconds
-	LiveMaximumSeekable = 432000_000
+	// 5 days in seconds
+	LiveMaximumSeekable = 432000
 )
 
 type VideoItag struct {
@@ -89,7 +89,6 @@ type ProgressInfo struct {
 	DataType  string
 	ByteCount int
 	MaxSeq    int
-	CurFrag   int
 	StartFrag int
 }
 
@@ -102,7 +101,6 @@ type Fragment struct {
 	XHeadSeqNum int
 	Data        *bytes.Buffer
 	Slow        bool
-	FragmentDur int
 }
 
 type seqChanInfo struct {
@@ -168,10 +166,8 @@ type DownloadInfo struct {
 	RetrySecs      int
 	Jobs           int
 	TargetDuration int
+	LastSq         int
 	LastUpdated    time.Time
-
-	FragmentDur int
-	LastSq      int
 
 	MDLInfo map[string]*MediaDLInfo
 }
@@ -540,8 +536,8 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 	if len(usePR.StreamingData.DashManifestURL) > 0 {
 		manifest := DownloadData(usePR.StreamingData.DashManifestURL)
 		if len(manifest) > 0 {
-			// we store the LastSq and FragmentDur to calculate 5 days past
-			urls, di.LastSq, di.FragmentDur = GetUrlsFromManifest(manifest)
+			// we store the LastSq to calculate 5 days past
+			urls, di.LastSq = GetUrlsFromManifest(manifest)
 		}
 
 		if len(urls) > 0 {
@@ -815,16 +811,10 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 
 		var data *bytes.Buffer
 		headerSeqnum := -1
-		headerRuntime := -1
 		headerSeqnumStr := resp.Header.Get("X-Head-Seqnum")
-		headerRuntimeStr := resp.Header.Get("X-Head-Time-Millis")
 
 		if len(headerSeqnumStr) > 0 {
 			headerSeqnum, _ = strconv.Atoi(headerSeqnumStr)
-		}
-
-		if len(headerRuntimeStr) > 0 {
-			headerRuntime, _ = strconv.Atoi(headerRuntimeStr)
 		}
 
 		if state.ToFile {
@@ -852,19 +842,12 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 			isSlow = dlDuration > (time.Duration(float64(di.TargetDuration)*1.5) * time.Second)
 		}
 
-		fragmentDur := di.FragmentDur
-		if headerRuntime >= 0 && headerSeqnum >= 0 && fragmentDur <= 0 {
-			fragmentDur = headerRuntime / headerSeqnum
-			di.FragmentDur = fragmentDur
-		}
-
 		dataChan <- &Fragment{
 			Seq:         state.SeqNum,
 			XHeadSeqNum: headerSeqnum,
 			FileName:    fname,
 			Data:        data,
 			Slow:        isSlow,
-			FragmentDur: fragmentDur,
 		}
 
 		return
@@ -919,8 +902,9 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 	f, err := os.Create(dataFile)
 	defer func() { done <- struct{}{} }()
 
-	if di.FragmentDur >= 0 && di.LastSq >= 0 {
-		curFrag = di.LastSq - LiveMaximumSeekable / di.FragmentDur
+	if di.LastSq >= 0 {
+		curFrag = di.LastSq - (LiveMaximumSeekable / (di.TargetDuration))
+		maxSeqs = di.LastSq
 	}
 	if curFrag > 0 {
 		LogWarn("%s: YT only retains the livestream 5 days past for seeking, starting from sequence %d (latest is %d)", dataType, curFrag, di.LastSq)
@@ -1106,7 +1090,7 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 			}
 
 			curFrag += 1
-			progressChan <- &ProgressInfo{dataType, bytesWritten, maxSeqs, curFrag, startFrag}
+			progressChan <- &ProgressInfo{dataType, bytesWritten, maxSeqs, startFrag}
 
 			if di.FragFiles {
 				err = os.Remove(data.FileName)

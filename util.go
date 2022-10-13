@@ -28,7 +28,6 @@ import (
 
 type MPD struct {
 	Representations []Representation `xml:"Period>AdaptationSet>Representation"`
-	Durations []MpdDuration `xml:"Period>SegmentList>SegmentTimeline>S"`
 }
 
 // DASH Manifest element containing Youtube's media ID and a download URL
@@ -396,27 +395,17 @@ func IsFragmented(url string) bool {
 }
 
 // Prase the DASH manifest XML and get the download URLs from it
-func GetUrlsFromManifest(manifest []byte) (map[int]string, int, int) {
+func GetUrlsFromManifest(manifest []byte) (map[int]string, int) {
 	urls := make(map[int]string)
 	var mpd MPD
 
 	err := xml.Unmarshal(manifest, &mpd)
 	if err != nil {
 		LogWarn("Error parsing DASH manifest: %s", err)
-		return urls, -1, -1
+		return urls, -1
 	}
 
 	lastSq := -1
-	fragD := -1
-
-	fd := mpd.Durations
-	if len(fd) > 0 {
-		// as far as we know, all the segments have the same duration, at least for livestreams
-		fragD, err = strconv.Atoi(fd[0].D)
-		if err != nil {
-			fragD = -1
-		}
-	}
 
 	for _, r := range mpd.Representations {
 		itag, err := strconv.Atoi(r.Id)
@@ -429,7 +418,7 @@ func GetUrlsFromManifest(manifest []byte) (map[int]string, int, int) {
 			lastMedia := sl[len(sl)-1].Media
 			paths := strings.Split(lastMedia, "/")
 			for i, ps := range paths {
-				if ps == "sq" && len(paths) >= i + 1 {
+				if ps == "sq" && len(paths) >= i+1 {
 					lastSqC, err := strconv.Atoi(paths[i+1])
 					if err != nil {
 						lastSqC = -1
@@ -447,7 +436,7 @@ func GetUrlsFromManifest(manifest []byte) (map[int]string, int, int) {
 		}
 	}
 
-	return urls, lastSq, fragD
+	return urls, lastSq
 }
 
 func StringsIndex(arr []string, s string) int {
