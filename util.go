@@ -28,12 +28,24 @@ import (
 
 type MPD struct {
 	Representations []Representation `xml:"Period>AdaptationSet>Representation"`
+	Durations []MpdDuration `xml:"Period>SegmentList>SegmentTimeline>S"`
 }
 
 // DASH Manifest element containing Youtube's media ID and a download URL
 type Representation struct {
 	Id      string `xml:"id,attr"`
 	BaseURL string
+
+	// we need the last sq value of the format
+	SegmentList []MpdSegments `xml:"SegmentList>SegmentURL"`
+}
+
+type MpdSegments struct {
+	Media string `xml:"media,attr"`
+}
+
+type MpdDuration struct {
+	D string `xml:"d,attr"`
 }
 
 type Atom struct {
@@ -384,14 +396,26 @@ func IsFragmented(url string) bool {
 }
 
 // Prase the DASH manifest XML and get the download URLs from it
-func GetUrlsFromManifest(manifest []byte) map[int]string {
+func GetUrlsFromManifest(manifest []byte) (map[int]string, int, int) {
 	urls := make(map[int]string)
 	var mpd MPD
 
 	err := xml.Unmarshal(manifest, &mpd)
 	if err != nil {
 		LogWarn("Error parsing DASH manifest: %s", err)
-		return urls
+		return urls, -1, -1
+	}
+
+	lastSq := -1
+	fragD := -1
+
+	fd := mpd.Durations
+	if len(fd) > 0 {
+		// as far as we know, all the segments have the same duration, at least for livestreams
+		fragD, err = strconv.Atoi(fd[0].D)
+		if err != nil {
+			fragD = -1
+		}
 	}
 
 	for _, r := range mpd.Representations {
@@ -400,12 +424,30 @@ func GetUrlsFromManifest(manifest []byte) map[int]string {
 			continue
 		}
 
+		sl := r.SegmentList
+		if len(sl) > 0 {
+			lastMedia := sl[len(sl)-1].Media
+			paths := strings.Split(lastMedia, "/")
+			for i, ps := range paths {
+				if ps == "sq" && len(paths) >= i + 1 {
+					lastSqC, err := strconv.Atoi(paths[i+1])
+					if err != nil {
+						lastSqC = -1
+					}
+					if lastSq < lastSqC {
+						lastSq = lastSqC
+					}
+					break
+				}
+			}
+		}
+
 		if itag > 0 && len(r.BaseURL) > 0 {
 			urls[itag] = strings.ReplaceAll(r.BaseURL, "%", "%%") + "sq/%d"
 		}
 	}
 
-	return urls
+	return urls, lastSq, fragD
 }
 
 func StringsIndex(arr []string, s string) int {
