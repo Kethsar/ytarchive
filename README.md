@@ -22,6 +22,20 @@ Alternatively, if you have Go properly installed and set up, run `go install git
 
 `@master` is required because of some bullshit caching Go package proxies do. Should have used Rust...
 ## Usage
+
+# Docker 
+Clone the repo and run `docker build -t ytarchiver .` inside.
+
+Or use the image from [hub.docker.com](https://hub.docker.com/r/z0pyrus/ytarchiver) (`docker pull z0pyrus/ytarchiver`)
+
+To run the Docker Container use `docker run -it --name ytarcher /home/user/ytarchiver:/app/downloads z0pyrus/ytarchiver 'options' 'youtube url' 'quality'`. Use for `/home/user/ytarchiver` your path where the videoes will be saved.
+
+For example `docker run -it --name ytarcher /home/user/ytarchiver:/app/downloads z0pyrus/ytarchiver '--debug' '--monitor-channel' '-r' '180' '[youtube url]' 'best'`
+
+It is recommended to add `--log-opt max-size='100kb'`
+
+You can also add a cookies file. Simply add `-v /path-to-cookie-file:/app/cookies.txt` for example:
+`docker run --name ytarchiver -v /home/user/yta:/app/downloads -v /home/user/yta/cookies.txt:/app/cookies.txt  z0pyrus/ytarchiver:latest '--cookies' 'cookies.txt' 'https://www.youtube.com/watch?v=something' '480p'`
 # Usage
 
 ```
