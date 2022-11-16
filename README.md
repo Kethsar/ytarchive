@@ -1,33 +1,27 @@
 # ytarchive
+
 Attempt to archive a given Youtube livestream from the start. This is most useful for streams that have already started and you want to download, but can also be used to wait for a scheduled stream and start downloading as soon as it starts. If you want to download a VOD, I recommend [yt-dlp](https://github.com/yt-dlp/yt-dlp), which is an actively maintained fork of youtube-dl with more features.
 
 A [WebUI front-end](https://github.com/lekoOwO/ytarchive-ui) was created by leko, if that's something you want. Note that I do not use this myself and cannot comment on how well it works or looks, but it could be useful if you want to set up downloading on a remote server, or make a service out of it.
 
-# Dependencies
-- [FFmpeg](https://ffmpeg.org/) needs to be installed to mux the final file.
+## Dependencies
 
-# Installation
-## Bare Metal
+- [FFmpeg](https://ffmpeg.org/) needs to be installed to mux the final file.
+## Installation
+
 Download the latest pre-release from [the releases page](https://github.com/Kethsar/ytarchive/releases)
+Download the latest pre-release from [the releases page](https://github.com/Kethsar/ytarchive/releases)
+
+If you use [Homebrew](https://brew.sh), you can install it by running
+
+```shell
+brew install danirukun/ytarchive/ytarchive
+```
 
 Alternatively, if you have Go properly installed and set up, run `go install github.com/Kethsar/ytarchive@master`
 
 `@master` is required because of some bullshit caching Go package proxies do. Should have used Rust...
-
-## Docker
-
-Clone the repo and run `docker build -t ytarchiver .` inside.
-
-Or use the image from [hub.docker.com](https://hub.docker.com/r/z0pyrus/ytarchiver) (`docker pull z0pyrus/ytarchiver`)
-
-To run the Docker Container use `docker run -it --name ytarcher /home/user/ytarchiver:/app/downloads z0pyrus/ytarchiver 'options' 'youtube url' 'quality'`. Use for `/home/user/ytarchiver` your path where the videoes will be saved.
-
-For example `docker run -it --name ytarcher /home/user/ytarchiver:/app/downloads z0pyrus/ytarchiver '--debug' '--monitor-channel' '-r' '180' 'youtube url' 'best'`
-
-You can also add a cookies file. Simply add `-v /path-to-cookie-file:/app/cookies.txt` for example:
-
-`docker run --name ytarchiver -v /home/user/yta:/app/downloads -v /home/user/yta/cookies.txt:/app/cookies.txt  z0pyrus/ytarchiver:latest '--cookies' 'cookies.txt' 'https://www.youtube.com/watch?v=something' '480p'`
-
+## Usage
 # Usage
 
 ```

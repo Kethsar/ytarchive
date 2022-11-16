@@ -25,10 +25,6 @@ const (
 	CookiePieces
 )
 
-/*
-   Assume provided cookie file only contains cookies for a single site
-   Maybe fix that later, not that we need to for this particular program
-*/
 func (di *DownloadInfo) ParseNetscapeCookiesFile(fname string) (*cookiejar.Jar, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{
 		PublicSuffixList: publicsuffix.List,
@@ -44,7 +40,7 @@ func (di *DownloadInfo) ParseNetscapeCookiesFile(fname string) (*cookiejar.Jar, 
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	var cookies []*http.Cookie
+	cookieMap := make(map[string][]*http.Cookie)
 
 	for scanner.Scan() {
 		// Could move everything in this loop into its own function
@@ -82,15 +78,23 @@ func (di *DownloadInfo) ParseNetscapeCookiesFile(fname string) (*cookiejar.Jar, 
 			HttpOnly: httpOnly,
 		}
 
-		cookies = append(cookies, cookie)
+		if _, ok := cookieMap[domain]; !ok {
+			cookieMap[domain] = make([]*http.Cookie, 0)
+		}
+
+		cookieMap[domain] = append(cookieMap[domain], cookie)
 	}
 
-	if len(cookies) > 0 {
-		url, err := url.Parse(fmt.Sprintf("https://%s", cookies[0].Domain))
+	if len(cookieMap) > 0 {
+		for _, cookies := range cookieMap {
+			url, err := url.Parse(fmt.Sprintf("https://%s", cookies[0].Domain))
 
-		if err == nil {
-			jar.SetCookies(url, cookies)
-			di.CookiesURL = url
+			if err == nil {
+				jar.SetCookies(url, cookies)
+				if strings.HasSuffix(url.Host, "youtube.com") {
+					di.CookiesURL = url
+				}
+			}
 		}
 	}
 
