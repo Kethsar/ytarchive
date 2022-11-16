@@ -28,15 +28,15 @@ Clone the repo and run `docker build -f Dockerfile-[your cpu architecture] -t yt
 
 Or use the image from [hub.docker.com](https://hub.docker.com/r/z0pyrus/ytarchiver) (`docker pull z0pyrus/ytarchiver`)
 
-To run the Docker Container use `docker run -it --name ytarchiver -v /home/user/ytarchiver:/app/downloads z0pyrus/ytarchiver '-o' 'options' 'youtube url' 'quality'`. Use for `/home/user/ytarchiver` your path where the videos will be saved.
-
+To run the Docker Container use `docker run -it --name ytarchiver -v /home/user/ytarchiver:/app/downloads z0pyrus/ytarchiver '[options]' '[youtube url]' '[quality]'`. Use for `/home/user/ytarchiver` your path where the videos will be saved.
 
 For example `docker run -it --name ytarchiver /home/user/ytarchiver:/app/downloads z0pyrus/ytarchiver '-o' '--debug' '--monitor-channel' '-r' '180' '[youtube url]' 'best'`
 
-It is recommended to add `--log-opt max-size='100kb'`
+If you are using a Volume to save the vidoes, Setting to option `'-o' '/app/downloads/%(title)s_%(id)s'` is mandatory:
 
-You can also add a cookies file. Simply add `-v /path-to-cookie-file:/app/cookies.txt` for example:
-`docker run --name ytarchiver -v /home/user/yta:/app/downloads -v /home/user/yta/cookies.txt:/app/cookies.txt  z0pyrus/ytarchiver:latest '-o' '--cookies' 'cookies.txt' 'https://www.youtube.com/watch?v=something' '480p'`
+`docker run -it --name ytarchiver -v /home/user/ytarchiver:/app/downloads z0pyrus/ytarchiver '-o' '/app/downloads/%(title)s_%(id)s' '[options]' '[youtube url]' '[quality]'`
+
+It is recommended to add `--log-opt max-size='100kb'` to your docker run command.
 
 # Usage
 
