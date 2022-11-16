@@ -31,7 +31,7 @@ jobs:
         name: Build and push
         uses: docker/build-push-action@v3
         with:
-          file: ./Docker/Dockerfile
+          file: ./Dockerfile
           context: .
           platforms: linux/amd64,linux/arm64,linux/arm32/v7
           push: true
