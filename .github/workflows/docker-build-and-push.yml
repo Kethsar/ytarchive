@@ -33,6 +33,6 @@ jobs:
         with:
           file: ./Dockerfile
           context: .
-          platforms: linux/amd64,linux/arm64,linux/arm32/v7
+          platforms: linux/amd64,linux/arm64,linux/arm
           push: true
           tags: z0pyrus/ytarchiver:latest
