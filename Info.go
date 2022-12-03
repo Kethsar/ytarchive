@@ -72,18 +72,18 @@ var (
 )
 
 /*
-   Simple class to more easily keep track of what fields are available for
-   file name formatting
+Simple class to more easily keep track of what fields are available for
+file name formatting
 */
 type FormatInfo map[string]string
 
 /*
-   Metadata for the final file
+Metadata for the final file
 */
 type MetaInfo map[string]string
 
 /*
-   Info to be sent through the progress queue
+Info to be sent through the progress queue
 */
 type ProgressInfo struct {
 	DataType  string
@@ -93,7 +93,7 @@ type ProgressInfo struct {
 }
 
 /*
-   Fragment information/data
+Fragment information/data
 */
 type Fragment struct {
 	Seq         int
@@ -109,7 +109,7 @@ type seqChanInfo struct {
 }
 
 /*
-	For sharing state between some functions used for downloading threads
+For sharing state between some functions used for downloading threads
 */
 type fragThreadState struct {
 	Name         string
@@ -135,7 +135,7 @@ type MediaDLInfo struct {
 }
 
 /*
-   Miscellaneous information
+Miscellaneous information
 */
 type DownloadInfo struct {
 	sync.RWMutex
@@ -446,7 +446,10 @@ func (di *DownloadInfo) ParseInputUrl() error {
 
 			di.VideoID = parsedQuery.Get("v")
 			return nil
-		} else if strings.HasPrefix(lowerPath, "/channel/") || strings.HasPrefix(lowerPath, "/c/") {
+		} else if strings.HasPrefix(lowerPath, "/channel/") ||
+			strings.HasPrefix(lowerPath, "/c/") ||
+			strings.HasPrefix(lowerPath, "/user/") ||
+			strings.HasPrefix(lowerPath, "/@") {
 			// The URL can be polled and the stream can change depending on what
 			// the channel schedules. Useful for set-and-forget
 			chanSlashIdx := strings.Index(lowerPath[1:], "/") + 1
@@ -514,8 +517,8 @@ func (di *DownloadInfo) ParseInputUrl() error {
 }
 
 /*
-	Get download URLs either from the DASH manifest or from the adaptiveFormats.
-	Prioritize DASH manifest if it is available
+Get download URLs either from the DASH manifest or from the adaptiveFormats.
+Prioritize DASH manifest if it is available
 */
 func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 	urls := make(map[int]string)
