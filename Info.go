@@ -154,6 +154,7 @@ type DownloadInfo struct {
 	LiveURL     bool
 	AudioOnly   bool
 	VideoOnly   bool
+	InfoPrinted bool
 
 	Thumbnail       string
 	VideoID         string
@@ -357,6 +358,20 @@ func (mi MetaInfo) SetInfo(fi FormatInfo) {
 
 		mi[k] = val
 	}
+}
+
+func (di *DownloadInfo) printChannelAndTitle(pr *PlayerResponse) {
+	if di.InfoPrinted {
+		return
+	}
+
+	if len(pr.VideoDetails.Title) == 0 || len(pr.VideoDetails.Author) == 0 {
+		return
+	}
+
+	fmt.Printf("Channel: %s\n", pr.VideoDetails.Author)
+	fmt.Printf("Video Title: %s\n", pr.VideoDetails.Title)
+	di.InfoPrinted = true
 }
 
 func (di *DownloadInfo) printStatusWithoutLock() {
@@ -637,7 +652,7 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 
 		for !found {
 			if len(selQaulities) == 0 {
-				selQaulities = GetQualityFromUser(qualities, false, pr.VideoDetails.Title)
+				selQaulities = GetQualityFromUser(qualities, false)
 			}
 
 			for _, q := range selQaulities {

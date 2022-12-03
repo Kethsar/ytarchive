@@ -49,8 +49,8 @@ var (
 )
 
 /*
-   Auto-generated using https://mholt.github.io/json-to-go/
-   Trimmed after to relevent fields
+Auto-generated using https://mholt.github.io/json-to-go/
+Trimmed after to relevent fields
 */
 type PlayerResponse struct {
 	ResponseContext struct {
@@ -350,9 +350,12 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 			}
 
 			if firstWait {
+				if !(isLiveURL && di.RetrySecs > 0) {
+					di.printChannelAndTitle(pr)
+				}
 				fmt.Println()
 				if len(selectedQualities) < 1 {
-					selectedQualities = GetQualityFromUser(VideoQualities, true, pr.VideoDetails.Title)
+					selectedQualities = GetQualityFromUser(VideoQualities, true)
 				}
 			}
 
@@ -429,6 +432,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 				continue
 			}
 
+			di.printChannelAndTitle(pr)
 			streamData := pr.StreamingData
 			liveDetails := pr.Microformat.PlayerMicroformatRenderer.LiveBroadcastDetails
 			isLive := liveDetails.IsLiveNow

@@ -112,9 +112,9 @@ var fnameReplacer = strings.NewReplacer(
 )
 
 /*
-   Logging functions;
-   ansi sgr 0=reset, 1=bold, while 3x sets the foreground color:
-   0black 1red 2green 3yellow 4blue 5magenta 6cyan 7white
+Logging functions;
+ansi sgr 0=reset, 1=bold, while 3x sets the foreground color:
+0black 1red 2green 3yellow 4blue 5magenta 6cyan 7white
 */
 func LogError(format string, args ...interface{}) {
 	if loglevel >= LogleveError {
@@ -201,8 +201,8 @@ func FormatSize(bsize int64) string {
 }
 
 /*
-	This is pretty dumb but the only way to handle sigint in a custom way
-	Thankfully we don't call this often enough to really care
+This is pretty dumb but the only way to handle sigint in a custom way
+Thankfully we don't call this often enough to really care
 */
 func getInput(c chan<- string) {
 	var input string
@@ -243,8 +243,8 @@ func GetYesNo(prompt string) bool {
 }
 
 /*
-   Execute an external process using the given args
-   Returns the process return code, or -1 on unknown error
+Execute an external process using the given args
+Returns the process return code, or -1 on unknown error
 */
 func Execute(prog string, args []string) int {
 	retcode := 0
@@ -288,8 +288,8 @@ func DownloadData(url string) []byte {
 }
 
 /*
-	Download the given url to the given file name.
-	Obviously meant to be used for thumbnail images.
+Download the given url to the given file name.
+Obviously meant to be used for thumbnail images.
 */
 func DownloadThumbnail(url, fname string) bool {
 	resp, err := client.Get(url)
@@ -357,7 +357,7 @@ func ParseQualitySelection(formats []string, quality string) []string {
 }
 
 // Prompt the user to select a video quality
-func GetQualityFromUser(formats []string, waiting bool, title string) []string {
+func GetQualityFromUser(formats []string, waiting bool) []string {
 	var selQualities []string
 	qualities := MakeQualityList(formats)
 
@@ -369,7 +369,6 @@ func GetQualityFromUser(formats []string, waiting bool, title string) []string {
 		)
 	}
 
-	fmt.Printf("Video Title: %s\n", title)
 	fmt.Printf("Available video qualities: %s\n", qualities)
 
 	for len(selQualities) < 1 {
@@ -386,9 +385,9 @@ func GetQualityFromUser(formats []string, waiting bool, title string) []string {
 }
 
 /*
-	Per anon, there will be a noclen parameter if the given URLs are meant to
-	be downloaded in fragments. Else it will have a clen parameter, obviously
-	specifying content length.
+Per anon, there will be a noclen parameter if the given URLs are meant to
+be downloaded in fragments. Else it will have a clen parameter, obviously
+specifying content length.
 */
 func IsFragmented(url string) bool {
 	return strings.Index(strings.ToLower(url), "noclen") > 0
