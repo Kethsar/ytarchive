@@ -369,13 +369,15 @@ func (di *DownloadInfo) printChannelAndTitle(pr *PlayerResponse) {
 		return
 	}
 
-	fmt.Printf("Channel: %s\n", pr.VideoDetails.Author)
-	fmt.Printf("Video Title: %s\n", pr.VideoDetails.Title)
+	LogGeneral("Channel: %s\n", pr.VideoDetails.Author)
+	LogGeneral("Video Title: %s\n", pr.VideoDetails.Title)
 	di.InfoPrinted = true
 }
 
 func (di *DownloadInfo) printStatusWithoutLock() {
-	fmt.Print(di.Status)
+	if loglevel >= LoglevelError {
+		fmt.Fprint(os.Stderr, di.Status)
+	}
 }
 
 func (di *DownloadInfo) SetStatus(status string) {
@@ -394,7 +396,7 @@ func (di *DownloadInfo) PrintStatus() {
 
 // Ask if the user wants to wait for a scheduled stream to start and then record it
 func (di *DownloadInfo) AskWaitForStream() bool {
-	fmt.Printf("%s\n%s\n",
+	LogGeneral("%s\n%s\n",
 		fmt.Sprintf("%s is likely a future scheduled livestream.", di.URL),
 		"Would you like to wait for the scheduled start time, poll until it starts, or not wait?",
 	)
@@ -437,7 +439,7 @@ func (di *DownloadInfo) GetGvideoUrl(dataType string) {
 			di.SetDownloadUrl(dataType, newUrl)
 			break
 		} else {
-			fmt.Println("URL given does not appear to be appropriate for the data type needed.")
+			LogGeneral("URL given does not appear to be appropriate for the data type needed.")
 		}
 	}
 }
@@ -683,13 +685,13 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 					di.SetDownloadUrl(DtypeVideo, dlUrls[videoItag.VP9])
 					di.Quality = videoItag.VP9
 					found = true
-					fmt.Printf("Selected quality: %s (VP9)\n", q)
+					LogGeneral("Selected quality: %s (VP9)\n", q)
 					break
 				} else if h264Ok {
 					di.SetDownloadUrl(DtypeVideo, dlUrls[videoItag.H264])
 					di.Quality = videoItag.H264
 					found = true
-					fmt.Printf("Selected quality: %s (h264)\n", q)
+					LogGeneral("Selected quality: %s (h264)\n", q)
 					break
 				}
 			}
@@ -701,8 +703,8 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 				i.e. 1080p60/720p60 when the stream is only available in 30 FPS
 			*/
 			if !found {
-				fmt.Println("\nThe qualities you selected ended up unavailable for this stream")
-				fmt.Println("You will now have the option to select from the available qualities")
+				LogGeneral("\nThe qualities you selected ended up unavailable for this stream")
+				LogGeneral("You will now have the option to select from the available qualities")
 				selQaulities = selQaulities[len(selQaulities):]
 			}
 		}

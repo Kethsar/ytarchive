@@ -34,14 +34,16 @@ var (
 )
 
 func PrintVersion() {
-	fmt.Printf("ytarchive %d.%d.%d%s%s\n", MajorVersion, MinorVersion, PatchVersion, Candidate, Commit)
+	if loglevel >= LoglevelError {
+		fmt.Fprintf(os.Stderr, "ytarchive %d.%d.%d%s%s\n", MajorVersion, MinorVersion, PatchVersion, Candidate, Commit)
+	}
 }
 
 func PrintHelp() {
 	fname := filepath.Base(os.Args[0])
 	qlist := MakeQualityList(VideoQualities)
 
-	fmt.Printf(`
+	fmt.Fprintf(os.Stderr, `
 usage: %[1]s [OPTIONS] [url] [quality]
 
 	[url] is a youtube livestream URL. If not provided, you will be
@@ -81,6 +83,9 @@ Options:
 
 	--debug
 		Print a lot of extra information.
+
+	--error
+		Print only errors and general information.
 
 	-k
 	--keep-ts-files
@@ -148,6 +153,10 @@ Options:
 		See FORMAT OPTIONS below for a list of available format keys.
 		Default is '%[3]s'
 
+	-q
+	--quiet
+		Print nothing to the console except information relevant for user input.
+
 	-r
 	--retry-stream SECONDS
 		If waiting for a scheduled livestream, re-check if the stream is
@@ -206,6 +215,10 @@ Options:
 		Wait for a livestream if it's a future scheduled stream.
 		If this option is not used when a scheduled stream is provided,
 		you will be asked if you want to wait or not.
+
+	--warn
+		Print warning, errors, and general information. This is the default log
+		level.
 
 	--write-description
 		Write the video description to a separate .description file.
@@ -296,6 +309,9 @@ var (
 	writeDesc         bool
 	writeThumbnail    bool
 	writeMuxCmd       bool
+	quiet             bool
+	errLog            bool
+	warn              bool
 	verbose           bool
 	debug             bool
 	trace             bool
@@ -343,6 +359,10 @@ func init() {
 	cliFlags.BoolVar(&noFragFiles, "no-frag-files", false, "Keep fragments in memory while waiting to write to the main file.")
 	cliFlags.BoolVar(&downloadThumbnail, "t", false, "Embed thumbnail into final file.")
 	cliFlags.BoolVar(&downloadThumbnail, "thumbnail", false, "Embed thumbnail into final file.")
+	cliFlags.BoolVar(&quiet, "q", false, "Quiet mode, do not log any output aside from user input requests.")
+	cliFlags.BoolVar(&quiet, "quiet", false, "Quiet mode, do not log any output aside from user input requests.")
+	cliFlags.BoolVar(&errLog, "error", false, "Error logging output.")
+	cliFlags.BoolVar(&warn, "warn", false, "Warning logging output.")
 	cliFlags.BoolVar(&verbose, "v", false, "Verbose logging output.")
 	cliFlags.BoolVar(&verbose, "verbose", false, "Verbose logging output.")
 	cliFlags.BoolVar(&debug, "debug", false, "Debug logging output.")
@@ -679,7 +699,7 @@ func run() int {
 			signal.Reset(os.Interrupt)
 			info.Stop()
 			cancelled = true
-			fmt.Println()
+			fmt.Fprintln(os.Stderr)
 			LogWarn("User Interrupt, Stopping download...")
 
 			for activeDownloads > 0 {
@@ -690,7 +710,7 @@ func run() int {
 				}
 			}
 
-			fmt.Println()
+			fmt.Fprintln(os.Stderr)
 			merge := false
 			if mergeOnCancel == ActionAsk {
 				merge = GetYesNo("\nDownload stopped prematurely. Would you like to merge the currently downloaded data?")
@@ -749,7 +769,7 @@ func run() int {
 	}
 
 	signal.Reset(os.Interrupt)
-	fmt.Println("\nDownload Finished")
+	LogGeneral("\nDownload Finished")
 
 	audioOnly = info.Quality == AudioOnlyQuality
 	if !audioOnly && !videoOnly && frags[DtypeAudio] != frags[DtypeVideo] {
@@ -789,12 +809,12 @@ func run() int {
 
 	_, err = exec.LookPath("ffmpeg")
 	if err != nil {
-		fmt.Println(ffmpegCmd)
+		LogGeneral(ffmpegCmd)
 		LogError("\nffmpeg not found. Please install ffmpeg")
 
 		retcode = WriteMuxFile(muxFile, ffmpegCmd)
 		if retcode != 0 {
-			fmt.Println(ffmpegCmd)
+			LogGeneral(ffmpegCmd)
 			LogError("\nThere was an error writing the muxcmd file.")
 			LogError("The command has been ouput above instead.")
 		}
@@ -802,13 +822,13 @@ func run() int {
 		return 1
 	}
 
-	fmt.Println("Muxing final file...")
+	LogGeneral("Muxing final file...")
 	fRetcode := Execute("ffmpeg", ffmpegArgs.Args)
 	if fRetcode != 0 {
 		retcode = fRetcode
 		wRetcode := WriteMuxFile(muxFile, ffmpegCmd)
 		if wRetcode != 0 {
-			fmt.Println(ffmpegCmd)
+			LogGeneral(ffmpegCmd)
 			LogError("\nThere was an error writing the muxcmd file.")
 			LogError("The command has been ouput above instead.")
 		}
@@ -819,7 +839,7 @@ func run() int {
 	}
 
 	if separateAudio {
-		fmt.Println("Creating separate audio file...")
+		LogGeneral("Creating separate audio file...")
 		aRetcode := Execute("ffmpeg", audioFFMpegArgs.Args)
 		if aRetcode != 0 {
 			retcode = aRetcode
@@ -840,27 +860,27 @@ func run() int {
 
 	CleanupFiles(filesToDel)
 
-	fmt.Printf("%[1]sFinal file: %[2]s%[1]s", "\n", ffmpegArgs.FileName)
+	LogGeneral("%[1]sFinal file: %[2]s%[1]s", "\n", ffmpegArgs.FileName)
 	if separateAudio {
-		fmt.Printf("%[1]sFinal audio file: %[2]s%[1]s", "\n", audioFFMpegArgs.FileName)
+		LogGeneral("%[1]sFinal audio file: %[2]s%[1]s", "\n", audioFFMpegArgs.FileName)
 	}
 
 	return 0
 }
 
 func main() {
-	PrintVersion()
 	cliFlags.Parse(os.Args[1:])
-	colorable.EnableColorsStdout(nil)
 	log.SetOutput(colorable.NewColorableStderr())
 	retcode := 0
 
 	if showHelp {
+		PrintVersion()
 		PrintHelp()
 		os.Exit(retcode)
 	}
 
 	if showVersion {
+		PrintVersion()
 		os.Exit(retcode)
 	}
 
@@ -871,7 +891,13 @@ func main() {
 		loglevel = LoglevelDebug
 		verbose = true
 	} else if verbose {
-		loglevel = LogleveInfo
+		loglevel = LoglevelInfo
+	} else if warn {
+		loglevel = LoglevelWarning
+	} else if errLog {
+		loglevel = LoglevelError
+	} else if quiet {
+		loglevel = LoglevelQuiet
 	}
 	log.SetPrefix("\r")
 
@@ -881,6 +907,7 @@ func main() {
 		networkType = NetworkIPv6
 	}
 
+	PrintVersion()
 	for {
 		retcode = run()
 		if cancelled || !monitorChannel || !info.LiveURL {

@@ -65,6 +65,9 @@ Options:
 	--debug
 		Print a lot of extra information.
 
+	--error
+		Print only errors and general information.
+
 	-k
 	--keep-ts-files
 		Keep the final stream audio and video files after muxing them
@@ -131,6 +134,10 @@ Options:
 		See FORMAT OPTIONS below for a list of available format keys.
 		Default is '%(title)s-%(id)s'
 
+	-q
+	--quiet
+		Print nothing to the console except information relevant for user input.
+
 	-r
 	--retry-stream SECONDS
 		If waiting for a scheduled livestream, re-check if the stream is
@@ -189,6 +196,10 @@ Options:
 		Wait for a livestream if it's a future scheduled stream.
 		If this option is not used when a scheduled stream is provided,
 		you will be asked if you want to wait or not.
+
+	--warn
+		Print warning, errors, and general information. This is the default log
+		level.
 
 	--write-description
 		Write the video description to a separate .description file.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -266,16 +267,16 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 		if err != nil {
 			if waitOnLiveURL {
 				if liveWaited == 0 {
-					fmt.Printf("\nYou have opted to wait for a livestream to be scheduled. Waiting every %d seconds.\n", di.RetrySecs)
+					LogGeneral("\nYou have opted to wait for a livestream to be scheduled. Waiting every %d seconds.\n", di.RetrySecs)
 				}
 
 				time.Sleep(time.Duration(di.RetrySecs) * time.Second)
 				liveWaited += di.RetrySecs
-				fmt.Printf("\rTotal time waited: %d seconds", liveWaited)
+				LogGeneral("\rTotal time waited: %d seconds", liveWaited)
 				continue
 			}
 
-			fmt.Println()
+			fmt.Fprintln(os.Stderr)
 			LogError("Error retrieving player response: %s", err.Error())
 			return PlayerResponseNotFound, nil, nil
 		}
@@ -353,7 +354,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 				if !(isLiveURL && di.RetrySecs > 0) {
 					di.printChannelAndTitle(pr)
 				}
-				fmt.Println()
+				fmt.Fprintln(os.Stderr)
 				if len(selectedQualities) < 1 {
 					selectedQualities = GetQualityFromUser(VideoQualities, true)
 				}
@@ -362,7 +363,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 			if di.RetrySecs > 0 {
 				if firstWait {
 					firstWait = false
-					fmt.Printf("Waiting for stream, retrying every %d seconds...\n", di.RetrySecs)
+					LogGeneral("Waiting for stream, retrying every %d seconds...\n", di.RetrySecs)
 				}
 
 				time.Sleep(time.Duration(di.RetrySecs) * time.Second)
@@ -384,16 +385,16 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 
 			if slepTime > 0 {
 				if !firstWait {
-					fmt.Println("\nStream rescheduled.")
+					LogGeneral("\nStream rescheduled.")
 				}
 
 				firstWait = false
 				secsLate = 0
 
-				fmt.Printf("Stream starts at %s in %d seconds. ",
+				LogGeneral("Stream starts at %s in %d seconds. ",
 					pr.Microformat.PlayerMicroformatRenderer.LiveBroadcastDetails.StartTimestamp,
 					slepTime)
-				fmt.Println("Waiting for this time to elapse...")
+				LogGeneral("Waiting for this time to elapse...")
 
 				// Loop it just in case a rogue sleep interrupt happens
 				for slepTime > 0 {
@@ -411,7 +412,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 			}
 
 			if firstWait {
-				fmt.Printf("Stream should have started. Checking back every %d seconds\n", DefaultPollTime)
+				LogGeneral("Stream should have started. Checking back every %d seconds\n", DefaultPollTime)
 				firstWait = false
 			}
 
@@ -421,7 +422,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 			*/
 			time.Sleep(time.Duration(DefaultPollTime) * time.Second)
 			secsLate += DefaultPollTime
-			fmt.Printf("\rStream is %d seconds late...", secsLate)
+			LogGeneral("\rStream is %d seconds late...", secsLate)
 			continue
 
 		case PlayableOk:
@@ -447,16 +448,16 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 					if len(streamData.AdaptiveFormats) > 0 {
 						// Assume that all formats will be fully processed if one is, and vice versa
 						if len(streamData.AdaptiveFormats[0].URL) == 0 {
-							fmt.Println("Livestream has ended and is being processed. Download URLs not available.")
+							LogGeneral("Livestream has ended and is being processed. Download URLs not available.")
 							return PlayerResponseNotUsable, nil, nil
 						}
 
 						if !IsFragmented(streamData.AdaptiveFormats[0].URL) {
-							fmt.Println("Livestream has been processed. Use yt-dlp instead.")
+							LogGeneral("Livestream has been processed. Use yt-dlp instead.")
 							return PlayerResponseNotUsable, nil, nil
 						}
 					} else {
-						fmt.Println("Livestream has ended and is being processed. Download URLs not available.")
+						LogGeneral("Livestream has ended and is being processed. Download URLs not available.")
 						return PlayerResponseNotUsable, nil, nil
 					}
 				} else {
@@ -464,8 +465,8 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 						I actually ran into this case once so far.
 						Stream is set as playable, but has not started.
 					*/
-					fmt.Println("Livestream is offline, should have started, and does not have an end timestamp.")
-					fmt.Printf("Waiting %d seconds and trying again.\n", DefaultPollTime)
+					LogGeneral("Livestream is offline, should have started, and does not have an end timestamp.")
+					LogGeneral("Waiting %d seconds and trying again.\n", DefaultPollTime)
 					time.Sleep(time.Duration(DefaultPollTime) * time.Second)
 					continue
 				}
@@ -477,7 +478,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 			}
 		default:
 			if secsLate > 0 {
-				fmt.Println()
+				fmt.Fprintln(os.Stderr)
 			}
 
 			LogError("Unknown playability status: %s", pr.PlayabilityStatus.Status)
@@ -489,7 +490,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 		}
 
 		if secsLate > 0 {
-			fmt.Println()
+			fmt.Fprintln(os.Stderr)
 		}
 
 		break

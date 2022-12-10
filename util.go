@@ -58,9 +58,10 @@ type FFMpegArgs struct {
 }
 
 const (
-	LogleveError = iota
-	LogleveWarning
-	LogleveInfo
+	LoglevelQuiet = iota
+	LoglevelError
+	LoglevelWarning
+	LoglevelInfo
 	LoglevelDebug
 	LoglevelTrace
 )
@@ -90,7 +91,7 @@ const MaxFileNameLength = 243 // 255 - len(".description")
 var (
 	HtmlVideoLinkTag = []byte(`<link rel="canonical" href="https://www.youtube.com/watch?v=`)
 
-	loglevel              = LogleveWarning
+	loglevel              = LoglevelWarning
 	networkType           = NetworkBoth // Set to force IPv4 or IPv6
 	networkOverrideDialer = &net.Dialer{
 		Timeout:   10 * time.Second,
@@ -111,13 +112,23 @@ var fnameReplacer = strings.NewReplacer(
 	"*", "_",
 )
 
+func LogGeneral(format string, args ...interface{}) {
+	if loglevel >= LoglevelError {
+		msg := format
+		if len(args) > 0 {
+			msg = fmt.Sprintf(format, args...)
+		}
+		log.Print(msg)
+	}
+}
+
 /*
 Logging functions;
 ansi sgr 0=reset, 1=bold, while 3x sets the foreground color:
 0black 1red 2green 3yellow 4blue 5magenta 6cyan 7white
 */
 func LogError(format string, args ...interface{}) {
-	if loglevel >= LogleveError {
+	if loglevel >= LoglevelError {
 		msg := format
 		if len(args) > 0 {
 			msg = fmt.Sprintf(format, args...)
@@ -127,7 +138,7 @@ func LogError(format string, args ...interface{}) {
 }
 
 func LogWarn(format string, args ...interface{}) {
-	if loglevel >= LogleveWarning {
+	if loglevel >= LoglevelWarning {
 		msg := format
 		if len(args) > 0 {
 			msg = fmt.Sprintf(format, args...)
@@ -137,7 +148,7 @@ func LogWarn(format string, args ...interface{}) {
 }
 
 func LogInfo(format string, args ...interface{}) {
-	if loglevel >= LogleveInfo {
+	if loglevel >= LoglevelInfo {
 		msg := format
 		if len(args) > 0 {
 			msg = fmt.Sprintf(format, args...)
@@ -531,13 +542,13 @@ func ParseGvideoUrl(gvUrl, dataType string) (string, int) {
 	if !strings.HasSuffix(lowerHost, ".googlevideo.com") {
 		return newUrl, 0
 	} else if _, ok := parsedUrl.Query()["noclen"]; !ok {
-		fmt.Println("Given Google Video URL is not for a fragmented stream.")
+		LogGeneral("Given Google Video URL is not for a fragmented stream.")
 		return newUrl, 0
 	} else if dataType == DtypeAudio && itag != AudioItag {
-		fmt.Println("Given audio URL does not have the audio itag. Make sure you set the correct URL(s)")
+		LogGeneral("Given audio URL does not have the audio itag. Make sure you set the correct URL(s)")
 		return newUrl, 0
 	} else if dataType == DtypeVideo && itag == AudioItag {
-		fmt.Println("Given video URL has the audio itag set. Make sure you set the correct URL(s)")
+		LogGeneral("Given video URL has the audio itag set. Make sure you set the correct URL(s)")
 		return newUrl, 0
 	}
 
@@ -832,7 +843,7 @@ func TruncateString(s string, maxBytes int) string {
 }
 
 func WriteMuxFile(muxFile, ffmpegCmd string) int {
-	fmt.Printf("Writing ffmpeg command to create the final file to %s\n", muxFile)
+	LogGeneral("Writing ffmpeg command to create the final file to %s\n", muxFile)
 	err := os.WriteFile(muxFile, []byte(ffmpegCmd), 0644)
 	if err != nil {
 		LogError("Error writing muxcmd file: %s", err.Error())
