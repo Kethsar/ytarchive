@@ -68,6 +68,10 @@ Options:
 	--error
 		Print only errors and general information.
 
+	--ffmpeg-path
+		Set a specific ffmpeg location, including program name.
+		e.g. "C:\ffmpeg\ffmpeg.exe" or "/opt/ffmpeg/ffmpeg"
+
 	-k
 	--keep-ts-files
 		Keep the final stream audio and video files after muxing them

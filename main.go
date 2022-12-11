@@ -87,6 +87,10 @@ Options:
 	--error
 		Print only errors and general information.
 
+	--ffmpeg-path
+		Set a specific ffmpeg location, including program name.
+		e.g. "C:\ffmpeg\ffmpeg.exe" or "/opt/ffmpeg/ffmpeg"
+
 	-k
 	--keep-ts-files
 		Keep the final stream audio and video files after muxing them
@@ -302,6 +306,7 @@ var (
 	fnameFormat       string
 	gvAudioUrl        string
 	gvVideoUrl        string
+	ffmpegPath        string
 	threadCount       uint
 	retrySecs         int
 	downloadThumbnail bool
@@ -386,6 +391,7 @@ func init() {
 	cliFlags.StringVar(&cookieFile, "cookies", "", "Cookies to be used when downloading.")
 	cliFlags.StringVar(&fnameFormat, "o", DefaultFilenameFormat, "Filename output format.")
 	cliFlags.StringVar(&fnameFormat, "output", DefaultFilenameFormat, "Filename output format.")
+	cliFlags.StringVar(&ffmpegPath, "ffmpeg-path", "ffmpeg", "Specify a custom ffmpeg program location, including program name")
 	cliFlags.IntVar(&retrySecs, "r", 0, "Seconds to wait between checking stream status.")
 	cliFlags.IntVar(&retrySecs, "retry-stream", 0, "Seconds to wait between checking stream status.")
 	cliFlags.UintVar(&threadCount, "threads", 1, "Number of download threads for each stream type.")
@@ -801,16 +807,27 @@ func run() int {
 	retcode := 0
 	ffmpegArgs := GetFFmpegArgs(finalAudioFile, finalVideoFile, finalThumbnail, fdir, fname, audioOnly, videoOnly)
 	audioFFMpegArgs := GetFFmpegArgs(finalAudioFile, "", finalThumbnail, fdir, fname, true, false)
-	ffmpegCmd := "ffmpeg " + shellescape.QuoteCommand(ffmpegArgs.Args)
+	ffmpegCmd := fmt.Sprintf("%s %s", ffmpegPath, shellescape.QuoteCommand(ffmpegArgs.Args))
 
 	if writeMuxCmd {
+		if !movesOk {
+			LogError("At least one error occurred when moving files. Will not delete them.")
+		} else if tmpDir != fdir {
+			os.RemoveAll(tmpDir)
+		}
+
 		return WriteMuxFile(muxFile, ffmpegCmd)
 	}
 
-	_, err = exec.LookPath("ffmpeg")
+	_, err = exec.LookPath(ffmpegPath)
+	// Allow for binaries in the current working directory
+	if errors.Is(err, exec.ErrDot) {
+		err = nil
+	}
+
 	if err != nil {
-		LogGeneral(ffmpegCmd)
-		LogError("\nffmpeg not found. Please install ffmpeg")
+		LogError("\n%s not found. Please install ffmpeg or provide a location using --fmpeg-path", ffmpegPath)
+		LogError("Attempting to write the command for muxing the file manually to %s", muxFile)
 
 		retcode = WriteMuxFile(muxFile, ffmpegCmd)
 		if retcode != 0 {
@@ -819,11 +836,17 @@ func run() int {
 			LogError("The command has been ouput above instead.")
 		}
 
+		if !movesOk {
+			LogError("At least one error occurred when moving files. Will not delete them.")
+		} else if tmpDir != fdir {
+			os.RemoveAll(tmpDir)
+		}
+
 		return 1
 	}
 
 	LogGeneral("Muxing final file...")
-	fRetcode := Execute("ffmpeg", ffmpegArgs.Args)
+	fRetcode := Execute(ffmpegPath, ffmpegArgs.Args)
 	if fRetcode != 0 {
 		retcode = fRetcode
 		wRetcode := WriteMuxFile(muxFile, ffmpegCmd)
@@ -840,7 +863,7 @@ func run() int {
 
 	if separateAudio {
 		LogGeneral("Creating separate audio file...")
-		aRetcode := Execute("ffmpeg", audioFFMpegArgs.Args)
+		aRetcode := Execute(ffmpegPath, audioFFMpegArgs.Args)
 		if aRetcode != 0 {
 			retcode = aRetcode
 			LogError("Execute returned code %d. Something must have gone wrong with ffmpeg.", retcode)

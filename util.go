@@ -263,6 +263,11 @@ func Execute(prog string, args []string) int {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
+	// Allow for binaries in the current working directory
+	if errors.Is(cmd.Err, exec.ErrDot) {
+		cmd.Err = nil
+	}
+
 	LogDebug("Executing command: %s %s", prog, shellescape.QuoteCommand(cmd.Args))
 
 	err := cmd.Run()
