@@ -55,6 +55,13 @@ func (di *DownloadInfo) ParseNetscapeCookiesFile(fname string) (*cookiejar.Jar, 
 			continue
 		}
 
+		// Google started setting a json cookie.
+		// Technically speaking this is not considered valid as far as the RFC is concerned.
+		// Just skip them to avoid dumb logging Go does because ???
+		if strings.Contains(cookieParts[CookieValue], `"`) {
+			continue
+		}
+
 		domain = strings.ToLower(cookieParts[CookieDomain])
 		expire, _ = strconv.ParseInt(cookieParts[CookieExpiration], 10, 64)
 		expireTime := time.Unix(expire, 0)
