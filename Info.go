@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -148,6 +147,7 @@ type DownloadInfo struct {
 	InProgress  bool
 	Live        bool
 	VP9         bool
+	H264        bool
 	Unavailable bool
 	GVideoDDL   bool
 	FragFiles   bool
@@ -704,7 +704,7 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 				_, vp9Ok := dlUrls[videoItag.VP9]
 				_, h264Ok := dlUrls[videoItag.H264]
 
-				if vp9Ok && (di.VP9 || !h264Ok) { // Sometimes a quality is VP9 only apparently
+				if vp9Ok && (di.VP9 || !h264Ok) && !di.H264 { // Sometimes a quality is VP9 only apparently
 					di.SetDownloadUrl(DtypeVideo, dlUrls[videoItag.VP9])
 					di.Quality = videoItag.VP9
 					found = true
@@ -1060,7 +1060,7 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 			}
 
 			if di.FragFiles {
-				readBytes, err := ioutil.ReadFile(data.FileName)
+				readBytes, err := os.ReadFile(data.FileName)
 
 				if err != nil {
 					tries -= 1

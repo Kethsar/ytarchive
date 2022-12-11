@@ -91,6 +91,9 @@ Options:
 		Set a specific ffmpeg location, including program name.
 		e.g. "C:\ffmpeg\ffmpeg.exe" or "/opt/ffmpeg/ffmpeg"
 
+	--h264
+		Only download h264 video, skipping VP9 if it would have been used.
+
 	-k
 	--keep-ts-files
 		Keep the final stream audio and video files after muxing them
@@ -339,6 +342,7 @@ var (
 	separateAudio     bool
 	monitorChannel    bool
 	vp9               bool
+	h264              bool
 
 	cancelled = false
 )
@@ -373,6 +377,7 @@ func init() {
 	cliFlags.BoolVar(&debug, "debug", false, "Debug logging output.")
 	cliFlags.BoolVar(&trace, "trace", false, "Trace logging output.")
 	cliFlags.BoolVar(&vp9, "vp9", false, "Download VP9 video if available.")
+	cliFlags.BoolVar(&h264, "h264", false, "Only download h264 qualities.")
 	cliFlags.BoolVar(&addMeta, "add-metadata", false, "Write metadata to the final file.")
 	cliFlags.BoolVar(&writeDesc, "write-description", false, "Write description to a separate file.")
 	cliFlags.BoolVar(&writeThumbnail, "write-thumbnail", false, "Write thumbnail to a separate file.")
@@ -442,6 +447,7 @@ func run() int {
 	cliFlags.Parse(os.Args[1:])
 
 	info.VP9 = vp9
+	info.H264 = h264
 	info.RetrySecs = retrySecs
 
 	if doWait {

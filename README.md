@@ -72,6 +72,9 @@ Options:
 		Set a specific ffmpeg location, including program name.
 		e.g. "C:\ffmpeg\ffmpeg.exe" or "/opt/ffmpeg/ffmpeg"
 
+	--h264
+		Only download h264 video, skipping VP9 if it would have been used.
+
 	-k
 	--keep-ts-files
 		Keep the final stream audio and video files after muxing them
