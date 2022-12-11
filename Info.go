@@ -535,39 +535,80 @@ func (di *DownloadInfo) ParseInputUrl() error {
 
 /*
 Get download URLs either from the DASH manifest or from the adaptiveFormats.
-Prioritize DASH manifest if it is available
+Prioritize DASH manifest if it is available.
+Attempts to grab from an Android player response as well as desktop,
+favouring Android. Any formats not found in Android are looked for in the
+desktop player response.
 */
 func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 	urls := make(map[int]string)
-	var usePR *PlayerResponse
 	androidPR, err := di.DownloadAndroidPlayerResponse()
 
 	if err != nil {
 		LogDebug("Error getting android player response: %s", err.Error())
-		usePR = pr
-	} else if len(androidPR.StreamingData.DashManifestURL) == 0 && len(androidPR.StreamingData.AdaptiveFormats) == 0 {
-		LogDebug("Android API Player Response missing download URLs. Using web response.")
-		usePR = pr
 	} else {
-		LogDebug("Using Android API player response")
-		usePR = androidPR
+		if len(androidPR.StreamingData.DashManifestURL) > 0 {
+			LogDebug("Retrieving URLs from Android DASH manifest")
+			manifest := DownloadData(androidPR.StreamingData.DashManifestURL)
+			if len(manifest) > 0 {
+				// we store the LastSq to calculate 5 days past
+				urls, di.LastSq = GetUrlsFromManifest(manifest)
+			}
+
+			for itag := range urls {
+				LogTrace("Setting itag %d from Android DASH manifest", itag)
+			}
+		}
+
+		if len(androidPR.StreamingData.AdaptiveFormats) > 0 {
+			LogDebug("Retrieving URLs from Android adaptive formats")
+			for _, fmt := range androidPR.StreamingData.AdaptiveFormats {
+				if len(fmt.URL) == 0 {
+					continue
+				}
+				if _, ok := urls[fmt.Itag]; ok { // format exists already
+					continue
+				}
+
+				urls[fmt.Itag] = strings.ReplaceAll(fmt.URL, "%", "%%") + "&sq=%d"
+				LogTrace("Setting itag %d from Android adaptive formats", fmt.Itag)
+			}
+		}
 	}
 
-	if len(usePR.StreamingData.DashManifestURL) > 0 {
-		manifest := DownloadData(usePR.StreamingData.DashManifestURL)
+	if len(pr.StreamingData.DashManifestURL) > 0 {
+		LogDebug("Retrieving URLs from web DASH manifest")
+		manifest := DownloadData(pr.StreamingData.DashManifestURL)
 		if len(manifest) > 0 {
 			// we store the LastSq to calculate 5 days past
-			urls, di.LastSq = GetUrlsFromManifest(manifest)
-		}
+			dashUrls, lastSq := GetUrlsFromManifest(manifest)
+			if lastSq > di.LastSq {
+				di.LastSq = lastSq
+			}
 
-		if len(urls) > 0 {
-			return urls
+			for itag, url := range dashUrls {
+				if _, ok := urls[itag]; ok { // format exists already
+					continue
+				}
+
+				urls[itag] = url
+				LogTrace("Setting itag %d from web adaptive formats", itag)
+			}
 		}
 	}
 
-	for _, fmt := range usePR.StreamingData.AdaptiveFormats {
-		if len(fmt.URL) > 0 {
+	if len(pr.StreamingData.AdaptiveFormats) > 0 {
+		LogDebug("Retrieving URLs from web adaptive formats")
+		for _, fmt := range pr.StreamingData.AdaptiveFormats {
+			if len(fmt.URL) == 0 {
+				continue
+			}
+			if _, ok := urls[fmt.Itag]; ok { // format exists already
+				continue
+			}
+
 			urls[fmt.Itag] = strings.ReplaceAll(fmt.URL, "%", "%%") + "&sq=%d"
+			LogTrace("Setting itag %d from web adaptive formats", fmt.Itag)
 		}
 	}
 
@@ -607,8 +648,7 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 	pmfr := pr.Microformat.PlayerMicroformatRenderer
 	isLive := pmfr.LiveBroadcastDetails.IsLiveNow
 
-	formats := streamData.AdaptiveFormats
-	targetDur := int(formats[0].TargetDurationSec)
+	targetDur := int(streamData.AdaptiveFormats[0].TargetDurationSec)
 	if targetDur > 0 {
 		di.TargetDuration = targetDur
 	}
@@ -624,32 +664,15 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 		qualities = append(qualities, "audio_only")
 		found := false
 
-		for _, fmt := range formats {
-			if !strings.HasPrefix(fmt.MimeType, "video") {
-				continue
-			}
-
-			qlabel := strings.ToLower(fmt.QualityLabel)
-			priority := StringsIndex(VideoQualities, qlabel)
-			idx := 0
+		for _, qlabel := range VideoQualities {
 			videoItag := VideoLabelItags[qlabel]
 			_, vp9Ok := dlUrls[videoItag.VP9]
 			_, h264Ok := dlUrls[videoItag.H264]
 
-			if Contains(qualities, fmt.QualityLabel) || (!vp9Ok && !h264Ok) {
+			if Contains(qualities, qlabel) || (!vp9Ok && !h264Ok) {
 				continue
 			}
-
-			for _, q := range qualities {
-				p := StringsIndex(VideoQualities, q)
-				if p > priority {
-					break
-				}
-
-				idx++
-			}
-
-			qualities = InsertStringAt(qualities, idx, qlabel)
+			qualities = append(qualities, qlabel)
 		}
 
 		for !found {

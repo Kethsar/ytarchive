@@ -324,7 +324,6 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 			LogError("Reason: %s", pr.PlayabilityStatus.Reason)
 			LogError("Logged in status: %t", loggedIn)
 			LogError("If this is a members only stream, you provided a cookies.txt file, and the above 'logged in' status is not True, please try updating your cookies file.")
-			LogError("Also check if your cookies file includes '#HttpOnly_' in front of some lines. If it does, delete that part of those lines and try again.")
 
 			di.Unavailable = true
 			if di.InProgress {
