@@ -29,13 +29,12 @@ const (
 )
 
 var (
-	Commit    string
-	Candidate string
+	Commit string
 )
 
 func PrintVersion() {
 	if loglevel >= LoglevelError {
-		fmt.Fprintf(os.Stderr, "ytarchive %d.%d.%d%s%s\n", MajorVersion, MinorVersion, PatchVersion, Candidate, Commit)
+		fmt.Fprintf(os.Stderr, "ytarchive %d.%d.%d%s\n", MajorVersion, MinorVersion, PatchVersion, Commit)
 	}
 }
 

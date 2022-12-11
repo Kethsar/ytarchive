@@ -1,4 +1,4 @@
-name: build and upload
+name: build and upload pre-release
 on:
   push:
     branches:

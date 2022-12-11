@@ -267,12 +267,14 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 		if err != nil {
 			if waitOnLiveURL {
 				if liveWaited == 0 {
-					LogGeneral("\nYou have opted to wait for a livestream to be scheduled. Waiting every %d seconds.\n", di.RetrySecs)
+					LogGeneral("You have opted to wait for a livestream to be scheduled. Waiting every %d seconds.\n", di.RetrySecs)
 				}
 
 				time.Sleep(time.Duration(di.RetrySecs) * time.Second)
 				liveWaited += di.RetrySecs
-				LogGeneral("\rTotal time waited: %d seconds", liveWaited)
+				if loglevel > LoglevelQuiet {
+					fmt.Fprintf(os.Stderr, "\rTotal time waited: %d seconds", liveWaited)
+				}
 				continue
 			}
 

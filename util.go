@@ -112,6 +112,11 @@ var fnameReplacer = strings.NewReplacer(
 	"*", "_",
 )
 
+/*
+Logging functions;
+ansi sgr 0=reset, 1=bold, while 3x sets the foreground color:
+0black 1red 2green 3yellow 4blue 5magenta 6cyan 7white
+*/
 func LogGeneral(format string, args ...interface{}) {
 	if loglevel >= LoglevelError {
 		msg := format
@@ -122,11 +127,6 @@ func LogGeneral(format string, args ...interface{}) {
 	}
 }
 
-/*
-Logging functions;
-ansi sgr 0=reset, 1=bold, while 3x sets the foreground color:
-0black 1red 2green 3yellow 4blue 5magenta 6cyan 7white
-*/
 func LogError(format string, args ...interface{}) {
 	if loglevel >= LoglevelError {
 		msg := format
