@@ -25,7 +25,7 @@ const (
 const (
 	MajorVersion = 0
 	MinorVersion = 3
-	PatchVersion = 1
+	PatchVersion = 2
 )
 
 var (
