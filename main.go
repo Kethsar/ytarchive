@@ -87,7 +87,7 @@ Options:
 	--error
 		Print only errors and general information.
 
-	--ffmpeg-path
+	--ffmpeg-path FFMPEG_PATH
 		Set a specific ffmpeg location, including program name.
 		e.g. "C:\ffmpeg\ffmpeg.exe" or "/opt/ffmpeg/ffmpeg"
 
@@ -163,6 +163,11 @@ Options:
 	-q
 	--quiet
 		Print nothing to the console except information relevant for user input.
+
+	--retry-frags ATTEMPTS
+		Set the number of attempts to make when downloading a stream fragment.
+		Set to 0 to retry indefinitely, or until we are completely unable to.
+		Default is 10.
 
 	-r
 	--retry-stream SECONDS
@@ -311,6 +316,7 @@ var (
 	gvVideoUrl        string
 	ffmpegPath        string
 	threadCount       uint
+	fragMaxTries      uint
 	retrySecs         int
 	downloadThumbnail bool
 	addMeta           bool
@@ -396,10 +402,11 @@ func init() {
 	cliFlags.StringVar(&cookieFile, "cookies", "", "Cookies to be used when downloading.")
 	cliFlags.StringVar(&fnameFormat, "o", DefaultFilenameFormat, "Filename output format.")
 	cliFlags.StringVar(&fnameFormat, "output", DefaultFilenameFormat, "Filename output format.")
-	cliFlags.StringVar(&ffmpegPath, "ffmpeg-path", "ffmpeg", "Specify a custom ffmpeg program location, including program name")
+	cliFlags.StringVar(&ffmpegPath, "ffmpeg-path", "ffmpeg", "Specify a custom ffmpeg program location, including program name.")
 	cliFlags.IntVar(&retrySecs, "r", 0, "Seconds to wait between checking stream status.")
 	cliFlags.IntVar(&retrySecs, "retry-stream", 0, "Seconds to wait between checking stream status.")
 	cliFlags.UintVar(&threadCount, "threads", 1, "Number of download threads for each stream type.")
+	cliFlags.UintVar(&fragMaxTries, "retry-frags", 10, "Number of attempts to make when downloading stream fragments before stopping.")
 
 	cliFlags.Func("video-url", "Googlevideo URL for the video stream.", func(s string) error {
 		var itag int
@@ -449,6 +456,7 @@ func run() int {
 	info.VP9 = vp9
 	info.H264 = h264
 	info.RetrySecs = retrySecs
+	info.FragMaxTries = fragMaxTries
 
 	if doWait {
 		info.Wait = ActionDo

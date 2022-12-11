@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	FragMaxTries          = 10
 	DtypeAudio            = "audio"
 	DtypeVideo            = "video"
 	AudioItag             = 140
@@ -162,6 +161,7 @@ type DownloadInfo struct {
 	SelectedQuality string
 	Status          string
 
+	FragMaxTries   uint
 	Wait           int
 	Quality        int
 	RetrySecs      int
@@ -767,9 +767,12 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 	state.Is403 = false
 	fname := fmt.Sprintf("%s.frag%d.ts", state.BaseFilePath, state.SeqNum)
 
-	for state.Tries < FragMaxTries {
+	for state.Tries < int(di.FragMaxTries) || di.FragMaxTries == 0 {
 		if di.IsStopping() {
 			return
+		}
+		if di.FragMaxTries == 0 {
+			state.Tries = 0 // just in case someone actually somehow lets something run long enough to cause an overflow
 		}
 
 		baseUrl := di.GetDownloadUrl(state.DataType)

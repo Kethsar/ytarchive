@@ -68,7 +68,7 @@ Options:
 	--error
 		Print only errors and general information.
 
-	--ffmpeg-path
+	--ffmpeg-path FFMPEG_PATH
 		Set a specific ffmpeg location, including program name.
 		e.g. "C:\ffmpeg\ffmpeg.exe" or "/opt/ffmpeg/ffmpeg"
 
@@ -144,6 +144,11 @@ Options:
 	-q
 	--quiet
 		Print nothing to the console except information relevant for user input.
+
+	--retry-frags ATTEMPTS
+		Set the number of attempts to make when downloading a stream fragment.
+		Set to 0 to retry indefinitely, or until we are completely unable to.
+		Default is 10.
 
 	-r
 	--retry-stream SECONDS

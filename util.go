@@ -583,10 +583,10 @@ func ContinueFragmentDownload(di *DownloadInfo, state *fragThreadState) bool {
 		return false
 	}
 
-	if state.Tries >= FragMaxTries {
+	if di.FragMaxTries > 0 && state.Tries >= int(di.FragMaxTries) {
 		state.FullRetries -= 1
 
-		LogDebug("%s: Fragment %d: %d/%d retries", state.Name, state.SeqNum, state.Tries, FragMaxTries)
+		LogDebug("%s: Fragment %d: %d/%d retries", state.Name, state.SeqNum, state.Tries, di.FragMaxTries)
 		di.PrintStatus()
 
 		// Update video info to be safe if we are known to still be live
