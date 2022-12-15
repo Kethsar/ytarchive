@@ -376,7 +376,7 @@ func (di *DownloadInfo) printChannelAndTitle(pr *PlayerResponse) {
 
 func (di *DownloadInfo) printStatusWithoutLock() {
 	if loglevel >= LoglevelError {
-		fmt.Fprint(os.Stderr, di.Status)
+		fmt.Print(di.Status)
 	}
 }
 
