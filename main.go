@@ -788,7 +788,10 @@ func run() int {
 	}
 
 	signal.Reset(os.Interrupt)
-	LogGeneral("\nDownload Finished")
+	if loglevel > LoglevelQuiet {
+		fmt.Fprintln(os.Stderr)
+	}
+	LogGeneral("Download Finished")
 
 	audioOnly = info.Quality == AudioOnlyQuality
 	if !audioOnly && !videoOnly && frags[DtypeAudio] != frags[DtypeVideo] {
@@ -839,13 +842,13 @@ func run() int {
 	}
 
 	if err != nil {
-		LogError("\n%s not found. Please install ffmpeg or provide a location using --fmpeg-path", ffmpegPath)
+		LogError("%s not found. Please install ffmpeg or provide a location using --fmpeg-path", ffmpegPath)
 		LogError("Attempting to write the command for muxing the file manually to %s", muxFile)
 
 		retcode = WriteMuxFile(muxFile, ffmpegCmd)
 		if retcode != 0 {
 			LogGeneral(ffmpegCmd)
-			LogError("\nThere was an error writing the muxcmd file.")
+			LogError("There was an error writing the muxcmd file.")
 			LogError("The command has been ouput above instead.")
 		}
 
@@ -865,7 +868,7 @@ func run() int {
 		wRetcode := WriteMuxFile(muxFile, ffmpegCmd)
 		if wRetcode != 0 {
 			LogGeneral(ffmpegCmd)
-			LogError("\nThere was an error writing the muxcmd file.")
+			LogError("There was an error writing the muxcmd file.")
 			LogError("The command has been ouput above instead.")
 		}
 

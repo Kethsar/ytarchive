@@ -386,7 +386,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 
 			if slepTime > 0 {
 				if !firstWait {
-					LogGeneral("\nStream rescheduled.")
+					LogGeneral("Stream rescheduled.")
 				}
 
 				firstWait = false

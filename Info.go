@@ -726,7 +726,7 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 				i.e. 1080p60/720p60 when the stream is only available in 30 FPS
 			*/
 			if !found {
-				LogGeneral("\nThe qualities you selected ended up unavailable for this stream")
+				LogGeneral("The qualities you selected ended up unavailable for this stream")
 				LogGeneral("You will now have the option to select from the available qualities")
 				selQaulities = selQaulities[len(selQaulities):]
 			}
