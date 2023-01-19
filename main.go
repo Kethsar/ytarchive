@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -314,6 +315,7 @@ var (
 	gvAudioUrl        string
 	gvVideoUrl        string
 	ffmpegPath        string
+	proxyUrl          *url.URL
 	threadCount       uint
 	fragMaxTries      uint
 	retrySecs         int
@@ -441,6 +443,20 @@ func init() {
 
 		return nil
 	})
+
+	cliFlags.Func("proxy", "Specify a proxy to use for downloading.", func(s string) error {
+		parsedUrl, err := url.Parse(s)
+		if err != nil {
+			return errors.New("invalid proxy URL given with --proxy")
+		}
+
+		if parsedUrl.Scheme != "http" && parsedUrl.Scheme != "https" && parsedUrl.Scheme != "socks5" {
+			return errors.New("the proxy URL scheme must be http, https, or socks5")
+		}
+
+		proxyUrl = parsedUrl
+		return nil
+	})
 }
 
 // ehh, bad way to do this probably but allows deferred functions to run
@@ -450,7 +466,9 @@ func run() int {
 	mergeOnCancel := ActionAsk
 	saveOnCancel := ActionAsk
 	var moveErrs []error
+
 	cliFlags.Parse(os.Args[1:])
+	InitializeHttpClient(proxyUrl)
 
 	info.VP9 = vp9
 	info.H264 = h264

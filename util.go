@@ -97,7 +97,7 @@ var (
 		Timeout:   10 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}
-	client = DefaultClient()
+	client *http.Client
 )
 
 var fnameReplacer = strings.NewReplacer(
@@ -181,12 +181,17 @@ func DialContextOverride(ctx context.Context, network, addr string) (net.Conn, e
 	return networkOverrideDialer.DialContext(ctx, networkType, addr)
 }
 
-func DefaultClient() *http.Client {
+func InitializeHttpClient(proxyUrl *url.URL) {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
+
 	tr.DialContext = DialContextOverride
 	tr.ResponseHeaderTimeout = 10 * time.Second
+	if proxyUrl != nil {
+		// Override ProxyFromEnvironment (default setting)
+		tr.Proxy = http.ProxyURL(proxyUrl)
+	}
 
-	return &http.Client{
+	client = &http.Client{
 		Transport: tr,
 	}
 }
