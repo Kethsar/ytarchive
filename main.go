@@ -871,7 +871,7 @@ func run() int {
 	}
 
 	if err != nil {
-		LogError("%s not found. Please install ffmpeg or provide a location using --fmpeg-path", ffmpegPath)
+		LogError("%s not found. Please install ffmpeg or provide a location using --ffmpeg-path", ffmpegPath)
 		LogError("Attempting to write the command for muxing the file manually to %s", muxFile)
 
 		retcode = WriteMuxFile(muxFile, ffmpegCmd)
