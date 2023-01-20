@@ -141,6 +141,14 @@ Options:
 		See FORMAT OPTIONS below for a list of available format keys.
 		Default is '%(title)s-%(id)s'
 
+	--proxy <SCHEME>://[<USER>:<PASS>@]<HOST>:<PORT>
+		Specify a proxy to use for downloading. e.g.
+			- socks5://127.0.0.1:1080
+			- http://192.168.1.1:8080
+			- http://user:password@proxy.example.com:8080
+
+		HTTP, HTTPS and SOCKS5 proxy servers are supported.
+
 	-q
 	--quiet
 		Print nothing to the console except information relevant for user input.
@@ -264,6 +272,9 @@ Examples:
 	ytarchive -k -t --vp9 --monitor-channel --no-frag-files https://www.youtube.com/channel/UCvaTdHTWBGv3MKj3KVqJVCw/live best
 		Same as above, but waits for a stream on the given channel, and will
 		repeat the cycle after downloading each stream.
+
+	ytarchive --proxy http://127.0.0.1:9050 https://www.youtube.com/watch?v=2aIdHTuyYMA best
+		Downloads the given stream with a local HTTP proxy.
 
 FORMAT TEMPLATE OPTIONS
 	Format template keys provided are made to be the same as they would be for
