@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -158,6 +159,14 @@ Options:
 		See FORMAT OPTIONS below for a list of available format keys.
 		Default is '%[3]s'
 
+	--proxy <SCHEME>://[<USER>:<PASS>@]<HOST>:<PORT>
+		Specify a proxy to use for downloading. e.g.
+			- socks5://127.0.0.1:1080
+			- http://192.168.1.1:8080
+			- http://user:password@proxy.example.com:8080
+
+		HTTP, HTTPS and SOCKS5 proxy servers are supported.
+
 	-q
 	--quiet
 		Print nothing to the console except information relevant for user input.
@@ -282,6 +291,9 @@ Examples:
 		Same as above, but waits for a stream on the given channel, and will
 		repeat the cycle after downloading each stream.
 
+	%[1]s --proxy http://127.0.0.1:9050 https://www.youtube.com/watch?v=2aIdHTuyYMA best
+		Downloads the given stream with a local HTTP proxy.
+
 FORMAT TEMPLATE OPTIONS
 	Format template keys provided are made to be the same as they would be for
 	youtube-dl. See https://github.com/ytdl-org/youtube-dl#output-template
@@ -313,6 +325,7 @@ var (
 	gvAudioUrl        string
 	gvVideoUrl        string
 	ffmpegPath        string
+	proxyUrl          *url.URL
 	threadCount       uint
 	fragMaxTries      uint
 	retrySecs         int
@@ -440,6 +453,20 @@ func init() {
 
 		return nil
 	})
+
+	cliFlags.Func("proxy", "Specify a proxy to use for downloading.", func(s string) error {
+		parsedUrl, err := url.Parse(s)
+		if err != nil {
+			return errors.New("invalid proxy URL given with --proxy")
+		}
+
+		if parsedUrl.Scheme != "http" && parsedUrl.Scheme != "https" && parsedUrl.Scheme != "socks5" {
+			return errors.New("the proxy URL scheme must be http, https, or socks5")
+		}
+
+		proxyUrl = parsedUrl
+		return nil
+	})
 }
 
 // ehh, bad way to do this probably but allows deferred functions to run
@@ -449,7 +476,9 @@ func run() int {
 	mergeOnCancel := ActionAsk
 	saveOnCancel := ActionAsk
 	var moveErrs []error
+
 	cliFlags.Parse(os.Args[1:])
+	InitializeHttpClient(proxyUrl)
 
 	info.VP9 = vp9
 	info.H264 = h264
@@ -841,7 +870,7 @@ func run() int {
 	}
 
 	if err != nil {
-		LogError("%s not found. Please install ffmpeg or provide a location using --fmpeg-path", ffmpegPath)
+		LogError("%s not found. Please install ffmpeg or provide a location using --ffmpeg-path", ffmpegPath)
 		LogError("Attempting to write the command for muxing the file manually to %s", muxFile)
 
 		retcode = WriteMuxFile(muxFile, ffmpegCmd)
