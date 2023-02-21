@@ -3,8 +3,6 @@ on:
   push:
     tags:
       - "v*"
-    branches-ignore:
-      - "dev"
 
 jobs:
   build_upload:

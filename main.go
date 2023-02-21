@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/alessio/shellescape"
-	"github.com/mattn/go-colorable"
 )
 
 // Action enum
@@ -909,18 +908,18 @@ func run() int {
 
 func main() {
 	cliFlags.Parse(os.Args[1:])
-	log.SetOutput(colorable.NewColorableStderr())
+	Setup()
 	retcode := 0
 
 	if showHelp {
 		PrintVersion()
 		PrintHelp()
-		os.Exit(retcode)
+		Exit(retcode)
 	}
 
 	if showVersion {
 		PrintVersion()
-		os.Exit(retcode)
+		Exit(retcode)
 	}
 
 	if trace {
@@ -954,5 +953,5 @@ func main() {
 		}
 	}
 
-	os.Exit(retcode)
+	Exit(retcode)
 }

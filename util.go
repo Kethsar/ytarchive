@@ -240,7 +240,7 @@ func GetUserInput(prompt string) string {
 	case input = <-inputChan:
 	case <-sigChan:
 		fmt.Println("\nExiting...")
-		os.Exit(1)
+		Exit(1)
 	}
 
 	return input
