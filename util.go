@@ -421,7 +421,7 @@ func GetUrlsFromManifest(manifest []byte) (map[int]string, int) {
 
 	err := xml.Unmarshal(manifest, &mpd)
 	if err != nil {
-		LogWarn("Error parsing DASH manifest: %s", err)
+		LogDebug("Error parsing DASH manifest: %s", err)
 		return urls, -1
 	}
 
