@@ -67,6 +67,18 @@ var (
 		"2160p",
 		"2160p60",
 	}
+
+	forbiddenReplacer = strings.NewReplacer(
+		`/`, "⧸",
+		`\`, "⧹",
+		`:`, "˸",
+		`*`, "＊",
+		`?`, "？",
+		`<`, "＜",
+		`>`, "＞",
+		`|`, "｜",
+		`"`, "＂",
+	)
 )
 
 /*
@@ -171,6 +183,10 @@ type DownloadInfo struct {
 	LastUpdated    time.Time
 
 	MDLInfo map[string]*MediaDLInfo
+}
+
+func replaceForbiddenString(str string) string {
+	return forbiddenReplacer.Replace(str)
 }
 
 func NewDownloadInfo() *DownloadInfo {
@@ -339,13 +355,13 @@ func (fi FormatInfo) SetInfo(player_response *PlayerResponse) {
 
 	fi["id"] = vid
 	fi["url"] = url
-	fi["title"] = strings.TrimSpace(player_response.VideoDetails.Title)
+	fi["title"] = replaceForbiddenString(strings.TrimSpace(player_response.VideoDetails.Title))
 	fi["channel_id"] = player_response.VideoDetails.ChannelID
-	fi["channel"] = player_response.VideoDetails.Author
+	fi["channel"] = replaceForbiddenString(player_response.VideoDetails.Author)
 	fi["upload_date"] = startDate
 	fi["start_date"] = startDate
 	fi["publish_date"] = publishDate
-	fi["description"] = strings.TrimSpace(player_response.VideoDetails.ShortDescription)
+	fi["description"] = replaceForbiddenString(strings.TrimSpace(player_response.VideoDetails.ShortDescription))
 }
 
 func (mi MetaInfo) SetInfo(fi FormatInfo) {

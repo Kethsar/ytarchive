@@ -100,18 +100,6 @@ var (
 	client *http.Client
 )
 
-var fnameReplacer = strings.NewReplacer(
-	"<", "_",
-	">", "_",
-	":", "_",
-	`"`, "_",
-	"/", "_",
-	"\\", "_",
-	"|", "_",
-	"?", "_",
-	"*", "_",
-)
-
 /*
 Logging functions;
 ansi sgr 0=reset, 1=bold, while 3x sets the foreground color:
@@ -198,7 +186,7 @@ func InitializeHttpClient(proxyUrl *url.URL) {
 
 // Remove any illegal filename chars
 func SterilizeFilename(s string) string {
-	return fnameReplacer.Replace(s)
+	return regexp.MustCompile(`[\/:*?"<>|]`).ReplaceAllString(s, "_")
 }
 
 // Pretty formatting of byte count
