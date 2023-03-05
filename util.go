@@ -253,21 +253,44 @@ Returns the process return code, or -1 on unknown error
 func Execute(prog string, args []string) int {
 	retcode := 0
 	cmd := exec.Command(prog, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
 
 	// Allow for binaries in the current working directory
 	if errors.Is(cmd.Err, exec.ErrDot) {
 		cmd.Err = nil
 	}
 
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		LogError(err.Error())
+		return -1
+	}
+
 	LogDebug("Executing command: %s %s", prog, shellescape.QuoteCommand(cmd.Args))
 
-	err := cmd.Run()
+	err = cmd.Start()
+	if err != nil {
+		LogError(err.Error())
+		return -1
+	}
+
+	stderrBuf := make([]byte, 2048)
+	for {
+		bytes, err := stderr.Read(stderrBuf)
+		fmt.Fprint(os.Stderr, string(stderrBuf[:bytes]))
+
+		if err != nil {
+			if err != io.EOF {
+				LogError(err.Error())
+			}
+
+			break
+		}
+	}
+
+	err = cmd.Wait()
 	if err != nil {
 		if _, ok := err.(*exec.ExitError); ok {
 			retcode = cmd.ProcessState.ExitCode()
-			LogError(stderr.String())
 		} else {
 			retcode = -1
 			LogError(err.Error())
@@ -409,7 +432,7 @@ func GetUrlsFromManifest(manifest []byte) (map[int]string, int) {
 
 	err := xml.Unmarshal(manifest, &mpd)
 	if err != nil {
-		LogWarn("Error parsing DASH manifest: %s", err)
+		LogDebug("Error parsing DASH manifest: %s", err)
 		return urls, -1
 	}
 
