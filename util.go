@@ -901,10 +901,10 @@ func GetFFmpegArgs(audioFile, videoFile, thumbnail, fileDir, fileName string, on
 		ffmpegArgs = append(ffmpegArgs, "-i", thumbnail)
 	}
 
-	if mkv {
-		ext = "mkv"
-	} else if onlyAudio {
+	if onlyAudio {
 		ext = "m4a"
+	} else if mkv {
+		ext = "mkv"
 	} else {
 		ext = "mp4"
 	}
