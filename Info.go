@@ -218,7 +218,7 @@ func NewMetaInfo() MetaInfo {
 		"title":   "%(title)s",
 		"artist":  "%(channel)s",
 		"date":    "%(upload_date)s",
-		"comment": "%(url)s\n\nhttps://www.youtube.com/channel/%(channel_id)s\n\n%(description)s",
+		"comment": "%(url)s\n\n%(description)s\n\nhttps://www.youtube.com/channel/%(channel_id)s",
 	}
 }
 
