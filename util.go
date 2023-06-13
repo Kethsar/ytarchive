@@ -383,6 +383,9 @@ func ParseQualitySelection(formats []string, quality string) []string {
 		if stripped == "best" {
 			selQualities = append(selQualities, stripped)
 			continue
+		} else if stripped == "audio" {
+			selQualities = append(selQualities, stripped)
+			continue
 		}
 
 		for _, v := range formats {

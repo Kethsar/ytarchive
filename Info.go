@@ -693,6 +693,8 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 
 				if q == "best" {
 					q = qualities[len(qualities)-1]
+				} else if q == "audio" {
+					q = "audio_only"
 				}
 
 				videoItag := VideoLabelItags[q]
