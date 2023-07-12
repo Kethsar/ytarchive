@@ -334,6 +334,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 	isLiveURL := di.LiveURL
 	waitOnLiveURL := isLiveURL && di.RetrySecs > 0
 	liveWaited := 0
+	retryCount := 0
 	var secsLate int
 	var err error
 
@@ -365,8 +366,13 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 
 				time.Sleep(time.Duration(di.RetrySecs) * time.Second)
 				liveWaited += di.RetrySecs
+				retryCount += 1
 				if loglevel > LoglevelQuiet {
-					fmt.Fprintf(os.Stderr, "\rTotal time waited: %d seconds", liveWaited)
+					fmt.Fprintf(os.Stderr, "\rRetries: %d (Last retry: %s), Total time waited: %d seconds",
+						retryCount,
+						time.Now().Format("2006/01/02 15:04:05"),
+						liveWaited,
+					)
 				}
 				continue
 			}
