@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/net/html"
@@ -46,7 +47,8 @@ const (
 )
 
 var (
-	playerRespDecl = []byte("var ytInitialPlayerResponse =")
+	playerRespDecl    = []byte("var ytInitialPlayerResponse =")
+	ytInitialDataDecl = []byte("var ytInitialData =")
 )
 
 /*
@@ -117,10 +119,48 @@ type PlayerResponse struct {
 	} `json:"microformat"`
 }
 
+type YtInitialData struct {
+	Contents struct {
+		Twocolumnbrowseresultsrenderer struct {
+			Tabs []struct {
+				Tabrenderer struct {
+					Endpoint struct {
+						Commandmetadata struct {
+							Webcommandmetadata struct {
+								URL string `json:"url"`
+							} `json:"webCommandMetadata"`
+						} `json:"commandMetadata"`
+					} `json:"endpoint"`
+					Content struct {
+						Richgridrenderer struct {
+							Contents []YtInitialDataContent `json:"contents"`
+						} `json:"richGridRenderer"`
+					} `json:"content"`
+				} `json:"tabRenderer"`
+			} `json:"tabs"`
+		} `json:"twoColumnBrowseResultsRenderer"`
+	} `json:"contents"`
+}
+
+type YtInitialDataContent struct {
+	Richitemrenderer struct {
+		Content struct {
+			Videorenderer struct {
+				Videoid           string `json:"videoId"`
+				Thumbnailoverlays []struct {
+					Thumbnailoverlaytimestatusrenderer struct {
+						Style string `json:"style"`
+					} `json:"thumbnailOverlayTimeStatusRenderer"`
+				} `json:"thumbnailOverlays"`
+			} `json:"videoRenderer"`
+		} `json:"content"`
+	} `json:"richItemRenderer"`
+}
+
 // Search the given HTML for the player response object
-func GetPlayerResponseFromHtml(data []byte) []byte {
+func GetJsonFromHtml(htmlData []byte, jsonDecl []byte) []byte {
 	var objData []byte
-	reader := bytes.NewReader(data)
+	reader := bytes.NewReader(htmlData)
 	tokenizer := html.NewTokenizer(reader)
 	isScript := false
 
@@ -132,7 +172,7 @@ func GetPlayerResponseFromHtml(data []byte) []byte {
 		case html.TextToken:
 			if isScript {
 				data := tokenizer.Text()
-				declStart := bytes.Index(data, playerRespDecl)
+				declStart := bytes.Index(data, jsonDecl)
 				if declStart < 0 {
 					continue
 				}
@@ -157,6 +197,43 @@ func GetPlayerResponseFromHtml(data []byte) []byte {
 			}
 		}
 	}
+}
+
+func GetNewestLiveStream(liveUrl string) string {
+	initialData := &YtInitialData{}
+	var contents []YtInitialDataContent
+	streamsUrl := strings.Replace(liveUrl, "/live", "/streams", 1)
+	streamsHtml := DownloadData(streamsUrl)
+	ytInitialData := GetJsonFromHtml(streamsHtml, ytInitialDataDecl)
+	streamUrl := ""
+
+	err := json.Unmarshal(ytInitialData, initialData)
+	if err != nil {
+		return streamUrl
+	}
+
+	for _, tab := range initialData.Contents.Twocolumnbrowseresultsrenderer.Tabs {
+		if strings.HasSuffix(tab.Tabrenderer.Endpoint.Commandmetadata.Webcommandmetadata.URL, "/streams") {
+			contents = tab.Tabrenderer.Content.Richgridrenderer.Contents
+		}
+	}
+
+	for _, content := range contents {
+		isLive := false
+		for _, thumbnailRenderer := range content.Richitemrenderer.Content.Videorenderer.Thumbnailoverlays {
+			if thumbnailRenderer.Thumbnailoverlaytimestatusrenderer.Style == "LIVE" {
+				isLive = true
+				break
+			}
+		}
+
+		if isLive {
+			streamUrl = fmt.Sprintf("https://www.youtube.com/watch?v=%s", content.Richitemrenderer.Content.Videorenderer.Videoid)
+			break
+		}
+	}
+
+	return streamUrl
 }
 
 // At the time of adding, retrieving the player response from the api while
@@ -228,9 +305,9 @@ func (di *DownloadInfo) GetPlayerResponse(videoHtml []byte) (*PlayerResponse, er
 		return nil, fmt.Errorf("unable to retrieve data from video page")
 	}
 
-	prData := GetPlayerResponseFromHtml(videoHtml)
+	prData := GetJsonFromHtml(videoHtml, playerRespDecl)
 	if len(prData) == 0 {
-		if debug {
+		if debug && di.InProgress {
 			LogDebug("Could not find player response from video watch page. Writing html file to %s.html", di.VideoID)
 			os.WriteFile(fmt.Sprintf("%s.html", di.VideoID), videoHtml, 0644)
 		}
@@ -267,6 +344,18 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 	for {
 		videoHtml := DownloadData(di.URL)
 		pr, err = di.GetPlayerResponse(videoHtml)
+
+		if err != nil && isLiveURL {
+			if !waitOnLiveURL {
+				LogDebug("Could not get player response data from /live, scraping /streams")
+			}
+			streamUrl := GetNewestLiveStream(di.URL)
+
+			if len(streamUrl) > 0 {
+				videoHtml = DownloadData(streamUrl)
+				pr, err = di.GetPlayerResponse(videoHtml)
+			}
+		}
 
 		if err != nil {
 			if waitOnLiveURL {
