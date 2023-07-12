@@ -878,17 +878,6 @@ func TruncateString(s string, maxBytes int) string {
 	return b.String()
 }
 
-func WriteMuxFile(muxFile, ffmpegCmd string) int {
-	LogGeneral("Writing ffmpeg command to create the final file to %s\n", muxFile)
-	err := os.WriteFile(muxFile, []byte(ffmpegCmd), 0644)
-	if err != nil {
-		LogError("Error writing muxcmd file: %s", err.Error())
-		return 1
-	}
-
-	return 0
-}
-
 func GetFFmpegArgs(audioFile, videoFile, thumbnail, fileDir, fileName string, onlyAudio, onlyVideo bool) FFMpegArgs {
 	mergeFile := ""
 	ext := ""

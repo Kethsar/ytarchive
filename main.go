@@ -647,7 +647,10 @@ func run() int {
 	finalVideoFile := filepath.Join(fdir, fmt.Sprintf("%s.ts", vfileName))
 	finalThumbnail := filepath.Join(fdir, thmbnlName)
 	finalDescFile := filepath.Join(fdir, descFileName)
-	muxFile := filepath.Join(fdir, muxFileName)
+	finalMuxFile := filepath.Join(fdir, muxFileName)
+	ffmpegArgs := GetFFmpegArgs(finalAudioFile, finalVideoFile, finalThumbnail, fdir, fname, audioOnly, videoOnly)
+	audioFFMpegArgs := GetFFmpegArgs(finalAudioFile, "", finalThumbnail, fdir, fname, true, false)
+	ffmpegCmd := fmt.Sprintf("%s %s", ffmpegPath, shellescape.QuoteCommand(ffmpegArgs.Args))
 
 	info.MDLInfo[DtypeAudio].BasePath = filepath.Join(tmpDir, afileName)
 	info.MDLInfo[DtypeVideo].BasePath = filepath.Join(tmpDir, vfileName)
@@ -656,6 +659,7 @@ func run() int {
 	vfile := info.MDLInfo[DtypeVideo].BasePath + ".ts"
 	thmbnlFile := filepath.Join(tmpDir, thmbnlName)
 	descFile := filepath.Join(tmpDir, descFileName)
+	muxFile := filepath.Join(tmpDir, muxFileName)
 
 	progressChan := make(chan *ProgressInfo, info.Jobs*2)
 	var totalBytes int64
@@ -684,6 +688,12 @@ func run() int {
 			LogWarn("Error writing description file: %s", err)
 			TryDelete(descFile)
 		}
+	}
+
+	err = os.WriteFile(muxFile, []byte(ffmpegCmd), 0644)
+	if err != nil {
+		LogWarn("Failed to write initial mux file: %s", err)
+		TryDelete(muxFile)
 	}
 
 	dlDoneChan := make(chan struct{}, 2)
@@ -832,6 +842,7 @@ func run() int {
 	moveErrs = append(moveErrs, TryMove(vfile, finalVideoFile))
 	moveErrs = append(moveErrs, TryMove(thmbnlFile, finalThumbnail))
 	moveErrs = append(moveErrs, TryMove(descFile, finalDescFile))
+	moveErrs = append(moveErrs, TryMove(muxFile, finalMuxFile))
 
 	for _, err = range moveErrs {
 		if err != nil {
@@ -840,7 +851,8 @@ func run() int {
 		}
 	}
 
-	filesToDel := make([]string, 0, 3)
+	filesToDel := make([]string, 0, 4)
+	filesToDel = append(filesToDel, finalMuxFile)
 	if !keepTSFiles {
 		filesToDel = append(filesToDel, finalAudioFile, finalVideoFile)
 	}
@@ -849,18 +861,15 @@ func run() int {
 	}
 
 	retcode := 0
-	ffmpegArgs := GetFFmpegArgs(finalAudioFile, finalVideoFile, finalThumbnail, fdir, fname, audioOnly, videoOnly)
-	audioFFMpegArgs := GetFFmpegArgs(finalAudioFile, "", finalThumbnail, fdir, fname, true, false)
-	ffmpegCmd := fmt.Sprintf("%s %s", ffmpegPath, shellescape.QuoteCommand(ffmpegArgs.Args))
-
 	if writeMuxCmd {
 		if !movesOk {
 			LogError("At least one error occurred when moving files. Will not delete them.")
+			retcode = 1
 		} else if tmpDir != fdir {
 			os.RemoveAll(tmpDir)
 		}
 
-		return WriteMuxFile(muxFile, ffmpegCmd)
+		return retcode
 	}
 
 	_, err = exec.LookPath(ffmpegPath)
@@ -871,14 +880,6 @@ func run() int {
 
 	if err != nil {
 		LogError("%s not found. Please install ffmpeg or provide a location using --ffmpeg-path", ffmpegPath)
-		LogError("Attempting to write the command for muxing the file manually to %s", muxFile)
-
-		retcode = WriteMuxFile(muxFile, ffmpegCmd)
-		if retcode != 0 {
-			LogGeneral(ffmpegCmd)
-			LogError("There was an error writing the muxcmd file.")
-			LogError("The command has been ouput above instead.")
-		}
 
 		if !movesOk {
 			LogError("At least one error occurred when moving files. Will not delete them.")
@@ -893,13 +894,6 @@ func run() int {
 	fRetcode := Execute(ffmpegPath, ffmpegArgs.Args)
 	if fRetcode != 0 {
 		retcode = fRetcode
-		wRetcode := WriteMuxFile(muxFile, ffmpegCmd)
-		if wRetcode != 0 {
-			LogGeneral(ffmpegCmd)
-			LogError("There was an error writing the muxcmd file.")
-			LogError("The command has been ouput above instead.")
-		}
-
 		LogError("Execute returned code %d. Something must have gone wrong with ffmpeg.", retcode)
 		LogError("The .ts files will not be deleted in case the final file is broken.")
 		LogError("Finally, the ffmpeg command was either written to a file or output above.")
