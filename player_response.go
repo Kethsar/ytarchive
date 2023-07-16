@@ -360,6 +360,11 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 
 		if err != nil {
 			if waitOnLiveURL {
+				if len(selectedQualities) < 1 {
+					fmt.Fprintln(os.Stderr)
+					selectedQualities = GetQualityFromUser(VideoQualities, true)
+				}
+
 				if liveWaited == 0 {
 					LogGeneral("You have opted to wait for a livestream to be scheduled. Retrying every %d seconds.\n", di.RetrySecs)
 				}
@@ -467,6 +472,15 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 				}
 
 				time.Sleep(time.Duration(di.RetrySecs) * time.Second)
+				liveWaited += di.RetrySecs
+				retryCount += 1
+				if loglevel > LoglevelQuiet {
+					fmt.Fprintf(os.Stderr, "\rRetries: %d (Last retry: %s), Total time waited: %d seconds",
+						retryCount,
+						time.Now().Format("2006/01/02 15:04:05"),
+						liveWaited,
+					)
+				}
 				continue
 			}
 
