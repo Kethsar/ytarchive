@@ -10,9 +10,7 @@ Attempt to archive a given Youtube livestream from the start. This is most usefu
 
 Download the latest pre-release from [the releases page](https://github.com/Kethsar/ytarchive/releases)
 
-Alternatively, if you have Go properly installed and set up, run `go install github.com/Kethsar/ytarchive@master`
-
-`@master` is required because of some bullshit caching Go package proxies do. Should have used Rust... (should have been a better dev)
+Alternatively, if you have Go properly installed and set up, run `go install github.com/Kethsar/ytarchive@dev`
 
 ## Usage
 

@@ -133,8 +133,11 @@ type YtInitialData struct {
 					} `json:"endpoint"`
 					Content struct {
 						Richgridrenderer struct {
-							Contents []YtInitialDataContent `json:"contents"`
+							Contents []RichGridContent `json:"contents"`
 						} `json:"richGridRenderer"`
+						SectionListRenderer struct {
+							Contents []SectionListContent `json:"contents"`
+						} `json:"sectionListRenderer"`
 					} `json:"content"`
 				} `json:"tabRenderer"`
 			} `json:"tabs"`
@@ -142,7 +145,7 @@ type YtInitialData struct {
 	} `json:"contents"`
 }
 
-type YtInitialDataContent struct {
+type RichGridContent struct {
 	Richitemrenderer struct {
 		Content struct {
 			Videorenderer struct {
@@ -155,6 +158,21 @@ type YtInitialDataContent struct {
 			} `json:"videoRenderer"`
 		} `json:"content"`
 	} `json:"richItemRenderer"`
+}
+
+type SectionListContent struct {
+	ItemSectionRenderer struct {
+		Contents []struct {
+			Videorenderer struct {
+				Videoid           string `json:"videoId"`
+				Thumbnailoverlays []struct {
+					Thumbnailoverlaytimestatusrenderer struct {
+						Style string `json:"style"`
+					} `json:"thumbnailOverlayTimeStatusRenderer"`
+				} `json:"thumbnailOverlays"`
+			} `json:"videoRenderer"`
+		} `json:"contents"`
+	} `json:"itemSectionRenderer"`
 }
 
 // Search the given HTML for the player response object
@@ -199,9 +217,9 @@ func GetJsonFromHtml(htmlData []byte, jsonDecl []byte) []byte {
 	}
 }
 
-func GetNewestLiveStream(liveUrl string) string {
+func GetNewestStreamFromStreams(liveUrl string) string {
 	initialData := &YtInitialData{}
-	var contents []YtInitialDataContent
+	var contents []RichGridContent
 	streamsUrl := strings.Replace(liveUrl, "/live", "/streams", 1)
 	streamsHtml := DownloadData(streamsUrl)
 	ytInitialData := GetJsonFromHtml(streamsHtml, ytInitialDataDecl)
@@ -219,18 +237,63 @@ func GetNewestLiveStream(liveUrl string) string {
 	}
 
 	for _, content := range contents {
-		isLive := false
-		for _, thumbnailRenderer := range content.Richitemrenderer.Content.Videorenderer.Thumbnailoverlays {
+		videoRenderer := content.Richitemrenderer.Content.Videorenderer
+
+		for _, thumbnailRenderer := range videoRenderer.Thumbnailoverlays {
 			if thumbnailRenderer.Thumbnailoverlaytimestatusrenderer.Style == "LIVE" {
-				isLive = true
-				break
+				streamUrl = fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoRenderer.Videoid)
+				return streamUrl
 			}
 		}
+	}
 
-		if isLive {
-			streamUrl = fmt.Sprintf("https://www.youtube.com/watch?v=%s", content.Richitemrenderer.Content.Videorenderer.Videoid)
-			break
+	return streamUrl
+}
+
+func GetNewestStreamFromMembership(liveUrl string) string {
+	initialData := &YtInitialData{}
+	var contents []SectionListContent
+	streamsUrl := strings.Replace(liveUrl, "/live", "/membership", 1)
+	streamsHtml := DownloadData(streamsUrl)
+	ytInitialData := GetJsonFromHtml(streamsHtml, ytInitialDataDecl)
+	streamUrl := ""
+
+	err := json.Unmarshal(ytInitialData, initialData)
+	if err != nil {
+		return streamUrl
+	}
+
+	for _, tab := range initialData.Contents.Twocolumnbrowseresultsrenderer.Tabs {
+		if strings.HasSuffix(tab.Tabrenderer.Endpoint.Commandmetadata.Webcommandmetadata.URL, "/membership") {
+			contents = tab.Tabrenderer.Content.SectionListRenderer.Contents
 		}
+	}
+
+	for _, content := range contents {
+		for _, videoContent := range content.ItemSectionRenderer.Contents {
+			videoRenderer := videoContent.Videorenderer
+
+			for _, thumbnailRenderer := range videoRenderer.Thumbnailoverlays {
+				if thumbnailRenderer.Thumbnailoverlaytimestatusrenderer.Style == "LIVE" {
+					streamUrl = fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoRenderer.Videoid)
+					return streamUrl
+				}
+			}
+		}
+	}
+
+	return streamUrl
+}
+
+func (di *DownloadInfo) GetNewestLiveStream() string {
+	streamUrl := ""
+
+	if di.CookiesURL != nil {
+		streamUrl = GetNewestStreamFromMembership(di.URL)
+	}
+
+	if len(streamUrl) == 0 {
+		streamUrl = GetNewestStreamFromStreams(di.URL)
 	}
 
 	return streamUrl
@@ -297,6 +360,24 @@ func (di *DownloadInfo) DownloadAndroidPlayerResponse() (*PlayerResponse, error)
 	return pr, nil
 }
 
+func (di *DownloadInfo) GetVideoHtml() []byte {
+	var videoHtml []byte
+
+	if di.LiveURL {
+		streamUrl := di.GetNewestLiveStream()
+
+		if len(streamUrl) > 0 {
+			videoHtml = DownloadData(streamUrl)
+		}
+	}
+
+	if len(videoHtml) == 0 {
+		videoHtml = DownloadData(di.URL)
+	}
+
+	return videoHtml
+}
+
 // Get the player response object from youtube
 func (di *DownloadInfo) GetPlayerResponse(videoHtml []byte) (*PlayerResponse, error) {
 	pr := &PlayerResponse{}
@@ -343,20 +424,8 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 	}
 
 	for {
-		videoHtml := DownloadData(di.URL)
+		videoHtml := di.GetVideoHtml()
 		pr, err = di.GetPlayerResponse(videoHtml)
-
-		if err != nil && isLiveURL {
-			if !waitOnLiveURL {
-				LogDebug("Could not get player response data from /live, scraping /streams")
-			}
-			streamUrl := GetNewestLiveStream(di.URL)
-
-			if len(streamUrl) > 0 {
-				videoHtml = DownloadData(streamUrl)
-				pr, err = di.GetPlayerResponse(videoHtml)
-			}
-		}
 
 		if err != nil {
 			if waitOnLiveURL {
