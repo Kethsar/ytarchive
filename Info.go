@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -84,7 +85,7 @@ type MetaInfo map[string]string
 Info to be sent through the progress queue
 */
 type ProgressInfo struct {
-	DataType  string
+	Itag      int
 	ByteCount int
 	MaxSeq    int
 	StartFrag int
@@ -133,6 +134,16 @@ type MediaDLInfo struct {
 }
 
 /*
+State for resumable downloading
+*/
+type DownloadState struct {
+	Fragments int
+	Size      int64
+	TempDir   string
+	File      string `json:"-"`
+}
+
+/*
 Miscellaneous information
 */
 type DownloadInfo struct {
@@ -171,6 +182,7 @@ type DownloadInfo struct {
 	LastUpdated    time.Time
 
 	MDLInfo map[string]*MediaDLInfo
+	DLState map[int]*DownloadState
 }
 
 func NewDownloadInfo() *DownloadInfo {
@@ -186,6 +198,7 @@ func NewDownloadInfo() *DownloadInfo {
 			DtypeVideo: {},
 			DtypeAudio: {},
 		},
+		DLState: make(map[int]*DownloadState),
 	}
 }
 
@@ -392,6 +405,24 @@ func (di *DownloadInfo) PrintStatus() {
 	defer di.RUnlock()
 
 	di.printStatusWithoutLock()
+}
+
+func (di *DownloadInfo) SaveState(itag int) {
+	if len(di.DLState[itag].File) == 0 {
+		return
+	}
+
+	data, err := json.Marshal(di.DLState[itag])
+	if err != nil {
+		LogWarn("Error when saving state: %s", err)
+		return
+	}
+
+	err = os.WriteFile(di.DLState[itag].File, data, 0644)
+	if err != nil {
+		LogWarn("Error when saving state: %s", err)
+		return
+	}
 }
 
 // Ask if the user wants to wait for a scheduled stream to start and then record it
@@ -946,29 +977,59 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 	seqChan := make(chan *seqChanInfo, di.Jobs*2)
 	closed := false
 	curFrag := 0
+	startFrag := 0
 	activeDownloads := 0
 	maxSeqs := -1
 	tries := 10
 	jobNum := 1
 	slowFrags := 0
 	lastSlowFrag := 0
+	itag := 0
 	dataToWrite := make([]*Fragment, 0, di.Jobs)
 	deletingFrags := make([]string, 0, 1)
 	logName := fmt.Sprintf("%s-download", dataType)
-	f, err := os.Create(dataFile)
+	var f *os.File
+	var err error
 	defer func() { done <- struct{}{} }()
+
+	if dataType == DtypeAudio {
+		itag = AudioItag
+	} else {
+		itag = di.Quality
+	}
+
+	if di.DLState[itag].Fragments > 0 {
+		f, err = os.OpenFile(dataFile, os.O_RDWR, 0666)
+		if err != nil {
+			LogWarn("%s: Failed to open %s to resume download: %s", dataType, dataFile, err)
+			LogWarn("%s: Will truncate and start from the beginning", dataType)
+			f, err = os.Create(dataFile)
+		} else {
+			_, err = f.Seek(di.DLState[itag].Size, 0)
+			if err != nil {
+				LogWarn("%s: Failed to seek %s to resume download: %s", dataType, dataFile, err)
+				LogWarn("%s: Will truncate and start from the beginning", dataType)
+				f, err = os.Create(dataFile)
+			}
+		}
+	} else {
+		f, err = os.Create(dataFile)
+	}
 
 	if di.LastSq >= 0 {
 		curFrag = di.LastSq - (LiveMaximumSeekable / (di.TargetDuration))
 		maxSeqs = di.LastSq
 	}
-	if curFrag > 0 {
+
+	if curFrag < di.DLState[itag].Fragments {
+		curFrag = di.DLState[itag].Fragments
+	} else if curFrag > 0 {
 		LogWarn("%s: YT only retains the livestream 5 days past for seeking, starting from sequence %d (latest is %d)", dataType, curFrag, di.LastSq)
+		startFrag = curFrag
 	} else {
 		curFrag = 0
 	}
 	curSeq := curFrag
-	startFrag := curFrag
 
 	if err != nil {
 		LogError("%s: Error opening %s for writing: %s", dataType, dataFile, err)
@@ -1146,7 +1207,7 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 			}
 
 			curFrag += 1
-			progressChan <- &ProgressInfo{dataType, bytesWritten, maxSeqs, startFrag}
+			progressChan <- &ProgressInfo{itag, bytesWritten, maxSeqs, startFrag}
 
 			if di.FragFiles {
 				err = os.Remove(data.FileName)

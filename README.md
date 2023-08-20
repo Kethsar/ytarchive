@@ -2,8 +2,6 @@
 
 Attempt to archive a given Youtube livestream from the start. This is most useful for streams that have already started and you want to download, but can also be used to wait for a scheduled stream and start downloading as soon as it starts. If you want to download a VOD, I recommend [yt-dlp](https://github.com/yt-dlp/yt-dlp), which is an actively maintained fork of youtube-dl with more features.
 
-A [WebUI front-end](https://github.com/lekoOwO/ytarchive-ui) was created by leko, if that's something you want. Note that I do not use this myself and cannot comment on how well it works or looks, but it could be useful if you want to set up downloading on a remote server, or make a service out of it.
-
 ## Dependencies
 
 - [FFmpeg](https://ffmpeg.org/) needs to be installed to mux the final file.
@@ -12,15 +10,9 @@ A [WebUI front-end](https://github.com/lekoOwO/ytarchive-ui) was created by leko
 
 Download the latest pre-release from [the releases page](https://github.com/Kethsar/ytarchive/releases)
 
-If you use [Homebrew](https://brew.sh), you can install it by running
-
-```shell
-brew install danirukun/ytarchive/ytarchive
-```
-
 Alternatively, if you have Go properly installed and set up, run `go install github.com/Kethsar/ytarchive@master`
 
-`@master` is required because of some bullshit caching Go package proxies do. Should have used Rust...
+`@master` is required because of some bullshit caching Go package proxies do. Should have used Rust... (should have been a better dev)
 
 ## Usage
 
@@ -82,7 +74,7 @@ Options:
 
 	--merge
 		Automatically run the ffmpeg command for the downloaded streams
-		when sigint is received. You will be prompted otherwise.
+		when manually cancelling the download. You will be prompted otherwise.
 
 	--metadata KEY=VALUE
 		If writing metadata, overwrite/add metadata key-value entry.
@@ -119,11 +111,17 @@ Options:
 
 	--no-merge
 		Do not run the ffmpeg command for the downloaded streams
-		when sigint is received. You will be prompted otherwise.
+		when manually cancelling the download. You will be prompted otherwise.
 
 	--no-save
 		Do not save any downloaded data and files if not having ffmpeg
-		run when sigint is received. You will be prompted otherwise.
+		run when manually cancelling the download. You will be prompted otherwise.
+		Does nothing if --merge is set.
+
+	--no-save-state
+		Do not leave files required for resuming downloads when manually
+		cancelling the download. You will be prompted otherwise.
+		Does nothing if --merge or --save are set.
 
 	--no-video
 		If a googlevideo url is given or passed with --audio-url, do not
@@ -167,7 +165,15 @@ Options:
 
 	--save
 		Automatically save any downloaded data and files if not having
-		ffmpeg run when sigint is received. You will be prompted otherwise.
+		ffmpeg run when manually cancelling the download. You will be prompted
+		otherwise. Does nothing if --merge is set.
+
+	--save-state
+		Automatically leave files alone and do not delete anything when manually
+		cancelling the download, allowing for resuming a download later when
+		possible. You will be prompted otherwise.
+		Resuming requires the stream be available to download as normal.
+		Does nothing if --merge or --save are set.
 
 	--separate-audio
 		Save the audio to a separate file, similar to when downloading

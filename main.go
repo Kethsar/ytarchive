@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -100,7 +101,7 @@ Options:
 
 	--merge
 		Automatically run the ffmpeg command for the downloaded streams
-		when sigint is received. You will be prompted otherwise.
+		when manually cancelling the download. You will be prompted otherwise.
 
 	--metadata KEY=VALUE
 		If writing metadata, overwrite/add metadata key-value entry.
@@ -137,11 +138,17 @@ Options:
 
 	--no-merge
 		Do not run the ffmpeg command for the downloaded streams
-		when sigint is received. You will be prompted otherwise.
+		when manually cancelling the download. You will be prompted otherwise.
 
 	--no-save
 		Do not save any downloaded data and files if not having ffmpeg
-		run when sigint is received. You will be prompted otherwise.
+		run when manually cancelling the download. You will be prompted otherwise.
+		Does nothing if --merge is set.
+
+	--no-save-state
+		Do not leave files required for resuming downloads when manually
+		cancelling the download. You will be prompted otherwise.
+		Does nothing if --merge or --save are set.
 
 	--no-video
 		If a googlevideo url is given or passed with --audio-url, do not
@@ -185,7 +192,15 @@ Options:
 
 	--save
 		Automatically save any downloaded data and files if not having
-		ffmpeg run when sigint is received. You will be prompted otherwise.
+		ffmpeg run when manually cancelling the download. You will be prompted
+		otherwise. Does nothing if --merge is set.
+
+	--save-state
+		Automatically leave files alone and do not delete anything when manually
+		cancelling the download, allowing for resuming a download later when
+		possible. You will be prompted otherwise.
+		Resuming requires the stream be available to download as normal.
+		Does nothing if --merge or --save are set.
 
 	--separate-audio
 		Save the audio to a separate file, similar to when downloading
@@ -349,8 +364,10 @@ var (
 	noWait            bool
 	doMerge           bool
 	noMerge           bool
-	doSave            bool
-	noSave            bool
+	doSaveFiles       bool
+	noSaveFiles       bool
+	doSaveState       bool
+	noSaveState       bool
 	audioOnly         bool
 	videoOnly         bool
 	mkv               bool
@@ -378,8 +395,10 @@ func init() {
 	cliFlags.BoolVar(&noWait, "no-wait", false, "Do not wait for the stream to start.")
 	cliFlags.BoolVar(&doMerge, "merge", false, "Auto merge files on cancelled download.")
 	cliFlags.BoolVar(&noMerge, "no-merge", false, "Skip merging files on cancelled download.")
-	cliFlags.BoolVar(&doSave, "save", false, "Auto save files on cancelled download.")
-	cliFlags.BoolVar(&noSave, "no-save", false, "Delete all files on cancelled download.")
+	cliFlags.BoolVar(&doSaveFiles, "save", false, "Auto save files on cancelled download if not merging.")
+	cliFlags.BoolVar(&noSaveFiles, "no-save", false, "Delete all files on cancelled download if not merging.")
+	cliFlags.BoolVar(&doSaveState, "save-state", false, "Leave files alone for resuming a download later, if possible, when not saving files.")
+	cliFlags.BoolVar(&noSaveState, "no-save-state", false, "Do not leave files for resuming a download later.")
 	cliFlags.BoolVar(&audioOnly, "no-video", false, "Only download the audio stream.")
 	cliFlags.BoolVar(&videoOnly, "no-audio", false, "Only download the video stream.")
 	cliFlags.BoolVar(&noFragFiles, "no-frag-files", false, "Keep fragments in memory while waiting to write to the main file.")
@@ -474,7 +493,8 @@ func init() {
 func run() int {
 	info = NewDownloadInfo()
 	mergeOnCancel := ActionAsk
-	saveOnCancel := ActionAsk
+	saveFilesOnCancel := ActionAsk
+	saveStateOnCancel := ActionAsk
 	var moveErrs []error
 
 	cliFlags.Parse(os.Args[1:])
@@ -497,10 +517,16 @@ func run() int {
 		mergeOnCancel = ActionDoNot
 	}
 
-	if doSave {
-		saveOnCancel = ActionDo
-	} else if noSave {
-		saveOnCancel = ActionDoNot
+	if doSaveFiles {
+		saveFilesOnCancel = ActionDo
+	} else if noSaveFiles {
+		saveFilesOnCancel = ActionDoNot
+	}
+
+	if doSaveState {
+		saveStateOnCancel = ActionDo
+	} else if noSaveState {
+		saveStateOnCancel = ActionDoNot
 	}
 
 	if audioOnly {
@@ -584,10 +610,14 @@ func run() int {
 		return 1
 	}
 
+	info.DLState[AudioItag] = &DownloadState{}
+	info.DLState[info.Quality] = &DownloadState{}
+	audioOnly = info.Quality == AudioOnlyQuality
+
 	// We checked if there would be errors earlier, should be good
 	fullFPath, _ := FormatFilename(fnameFormat, info.FormatInfo)
 	fdir := filepath.Dir(fullFPath)
-	var tmpDir string
+	tmpDir := ""
 	var absDir string
 
 	if !strings.HasPrefix(fnameFormat, string(os.PathSeparator)) {
@@ -624,11 +654,38 @@ func run() int {
 		}
 	}
 
-	tmpDir, err = os.MkdirTemp(fdir, fmt.Sprintf("%s__", info.VideoID))
-	if err != nil {
-		LogWarn("Error creating temp directory: %s", err)
-		LogWarn("Will download data directly to %s instead", fdir)
-		tmpDir = fdir
+	info.DLState[AudioItag].File = filepath.Join(fdir, fmt.Sprintf("%s.f%d.state", info.VideoID, AudioItag))
+	info.DLState[info.Quality].File = filepath.Join(fdir, fmt.Sprintf("%s.f%d.state", info.VideoID, info.Quality))
+	if Exists(info.DLState[AudioItag].File) {
+		stateData, err := os.ReadFile(info.DLState[AudioItag].File)
+		if err == nil {
+			err = json.Unmarshal(stateData, info.DLState[AudioItag])
+		}
+		if err == nil {
+			tmpDir = info.DLState[AudioItag].TempDir
+		}
+	}
+	if Exists(info.DLState[info.Quality].File) {
+		stateData, err := os.ReadFile(info.DLState[info.Quality].File)
+		if err == nil {
+			err = json.Unmarshal(stateData, info.DLState[info.Quality])
+		}
+		if err == nil && len(tmpDir) == 0 {
+			tmpDir = info.DLState[AudioItag].TempDir
+		}
+	}
+
+	if len(tmpDir) == 0 {
+		tmpDir, err = os.MkdirTemp(fdir, fmt.Sprintf("%s__", info.VideoID))
+		if err != nil {
+			LogWarn("Error creating temp directory: %s", err)
+			LogWarn("Will download data directly to %s instead", fdir)
+			tmpDir = fdir
+		}
+
+		for _, state := range info.DLState {
+			state.TempDir = tmpDir
+		}
 	}
 
 	// Check if file name is too long, truncate if so
@@ -727,8 +784,10 @@ func run() int {
 	for {
 		select {
 		case progress := <-progressChan:
+			info.DLState[progress.Itag].Size += int64(progress.ByteCount)
+			info.DLState[progress.Itag].Fragments += 1
 			totalBytes += int64(progress.ByteCount)
-			frags[progress.DataType] += 1
+			info.SaveState(progress.Itag)
 
 			if progress.MaxSeq > maxSeq {
 				maxSeq = progress.MaxSeq
@@ -739,7 +798,7 @@ func run() int {
 				status = ""
 			}
 
-			status += fmt.Sprintf("Video Fragments: %d; Audio Fragments: %d; ", frags[DtypeVideo], frags[DtypeAudio])
+			status += fmt.Sprintf("Video Fragments: %d; Audio Fragments: %d; ", info.DLState[info.Quality].Fragments, info.DLState[AudioItag].Fragments)
 			if verbose {
 				status += fmt.Sprintf("Max Fragments: %d; Max Sequence: %d; ", (maxSeq - progress.StartFrag), maxSeq)
 			}
@@ -777,10 +836,20 @@ func run() int {
 
 			if !merge {
 				saveFiles := false
-				if saveOnCancel == ActionAsk {
+				saveState := false
+
+				if saveFilesOnCancel == ActionAsk {
 					saveFiles = GetYesNo("\nWould you like to save any created files?")
-				} else if saveOnCancel == ActionDo {
+				} else if saveFilesOnCancel == ActionDo {
 					saveFiles = true
+				}
+
+				if !saveFiles {
+					if saveStateOnCancel == ActionAsk {
+						saveState = GetYesNo("\nWould you like to leave files to resume downloading later?")
+					} else if saveStateOnCancel == ActionDo {
+						saveState = true
+					}
 				}
 
 				if saveFiles {
@@ -810,8 +879,18 @@ func run() int {
 					} else if tmpDir != fdir {
 						os.RemoveAll(tmpDir)
 					}
-				} else if tmpDir != fdir {
-					os.RemoveAll(tmpDir)
+
+					for _, state := range info.DLState {
+						TryDelete(state.File)
+					}
+				} else if !saveState {
+					if tmpDir != fdir {
+						os.RemoveAll(tmpDir)
+					}
+
+					for _, state := range info.DLState {
+						TryDelete(state.File)
+					}
 				}
 
 				return 2
@@ -826,12 +905,14 @@ func run() int {
 	}
 
 	signal.Reset(os.Interrupt)
+	for _, state := range info.DLState {
+		TryDelete(state.File)
+	}
 	if loglevel > LoglevelQuiet {
 		fmt.Fprintln(os.Stderr)
 	}
 	LogGeneral("Download Finished")
 
-	audioOnly = info.Quality == AudioOnlyQuality
 	if !audioOnly && !videoOnly && frags[DtypeAudio] != frags[DtypeVideo] {
 		LogWarn("Mismatched number of video and audio fragments.")
 		LogWarn("The files should still be mergable but data might be missing.")
