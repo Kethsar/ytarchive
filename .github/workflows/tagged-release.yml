@@ -17,7 +17,7 @@ jobs:
       - name: build
         run: ./make.sh
       - name: version
-        run: echo "::set-output name=version::$(./ytarchive -V)"
+        run: echo "version=$(./ytarchive -V)" >> $GITHUB_OUTPUT
         id: version
       - name: release
         uses: marvinpinto/action-automatic-releases@latest

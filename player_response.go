@@ -250,55 +250,6 @@ func GetNewestStreamFromStreams(liveUrl string) string {
 	return streamUrl
 }
 
-func GetNewestStreamFromMembership(liveUrl string) string {
-	initialData := &YtInitialData{}
-	var contents []SectionListContent
-	streamsUrl := strings.Replace(liveUrl, "/live", "/membership", 1)
-	streamsHtml := DownloadData(streamsUrl)
-	ytInitialData := GetJsonFromHtml(streamsHtml, ytInitialDataDecl)
-	streamUrl := ""
-
-	err := json.Unmarshal(ytInitialData, initialData)
-	if err != nil {
-		return streamUrl
-	}
-
-	for _, tab := range initialData.Contents.Twocolumnbrowseresultsrenderer.Tabs {
-		if strings.HasSuffix(tab.Tabrenderer.Endpoint.Commandmetadata.Webcommandmetadata.URL, "/membership") {
-			contents = tab.Tabrenderer.Content.SectionListRenderer.Contents
-		}
-	}
-
-	for _, content := range contents {
-		for _, videoContent := range content.ItemSectionRenderer.Contents {
-			videoRenderer := videoContent.Videorenderer
-
-			for _, thumbnailRenderer := range videoRenderer.Thumbnailoverlays {
-				if thumbnailRenderer.Thumbnailoverlaytimestatusrenderer.Style == "LIVE" {
-					streamUrl = fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoRenderer.Videoid)
-					return streamUrl
-				}
-			}
-		}
-	}
-
-	return streamUrl
-}
-
-func (di *DownloadInfo) GetNewestLiveStream() string {
-	streamUrl := ""
-
-	if di.CookiesURL != nil {
-		streamUrl = GetNewestStreamFromMembership(di.URL)
-	}
-
-	if len(streamUrl) == 0 {
-		streamUrl = GetNewestStreamFromStreams(di.URL)
-	}
-
-	return streamUrl
-}
-
 // At the time of adding, retrieving the player response from the api while
 // claiming to be the android client seems to result in unthrottled download
 // URLs. Credit to yt-dlp devs for POST data and headers.
@@ -364,7 +315,11 @@ func (di *DownloadInfo) GetVideoHtml() []byte {
 	var videoHtml []byte
 
 	if di.LiveURL {
-		streamUrl := di.GetNewestLiveStream()
+		streamUrl := ""
+
+		if len(streamUrl) == 0 {
+			streamUrl = GetNewestStreamFromStreams(di.URL)
+		}
 
 		if len(streamUrl) > 0 {
 			videoHtml = DownloadData(streamUrl)
