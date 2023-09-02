@@ -909,11 +909,19 @@ func GetFFmpegArgs(audioFile, videoFile, thumbnail, fileDir, fileName string, on
 	}
 
 	if !onlyVideo {
-		ffmpegArgs = append(ffmpegArgs, "-i", audioFile)
+		ffmpegArgs = append(ffmpegArgs,
+			"-seekable", "0",
+			"-thread_queue_size", "1024",
+			"-i", audioFile,
+		)
 	}
 
 	if !onlyAudio {
-		ffmpegArgs = append(ffmpegArgs, "-i", videoFile)
+		ffmpegArgs = append(ffmpegArgs,
+			"-seekable", "0",
+			"-thread_queue_size", "1024",
+			"-i", videoFile,
+		)
 		if !mkv {
 			ffmpegArgs = append(ffmpegArgs, "-movflags", "faststart")
 		}

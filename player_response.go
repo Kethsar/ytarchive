@@ -560,7 +560,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 			*/
 			time.Sleep(time.Duration(DefaultPollTime) * time.Second)
 			secsLate += DefaultPollTime
-			LogGeneral("\rStream is %d seconds late...", secsLate)
+			LogGeneral("Stream is %d seconds late...", secsLate)
 			continue
 
 		case PlayableOk:
