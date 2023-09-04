@@ -397,7 +397,14 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 				liveWaited += di.RetrySecs
 				retryCount += 1
 				if loglevel > LoglevelQuiet {
-					fmt.Fprintf(os.Stderr, "\rRetries: %d (Last retry: %s), Total time waited: %d seconds",
+					msg := "Retries: %d (Last retry: %s), Total time waited: %d seconds"
+					if !statusNewlines {
+						msg = "\r" + msg
+					} else {
+						msg = msg + "\n"
+					}
+
+					fmt.Fprintf(os.Stderr, msg,
 						retryCount,
 						time.Now().Format("2006/01/02 15:04:05"),
 						liveWaited,
@@ -499,7 +506,14 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 				liveWaited += di.RetrySecs
 				retryCount += 1
 				if loglevel > LoglevelQuiet {
-					fmt.Fprintf(os.Stderr, "\rRetries: %d (Last retry: %s), Total time waited: %d seconds",
+					msg := "Retries: %d (Last retry: %s), Total time waited: %d seconds"
+					if !statusNewlines {
+						msg = "\r" + msg
+					} else {
+						msg = msg + "\n"
+					}
+
+					fmt.Fprintf(os.Stderr, msg,
 						retryCount,
 						time.Now().Format("2006/01/02 15:04:05"),
 						liveWaited,

@@ -124,6 +124,10 @@ Options:
 		Be careful to monitor your disk usage when using this to avoid filling
 		your drive while away.
 
+	--newline
+		Print every message to a new line, instead of some messages reusing one
+		line.
+
 	--no-audio
 		Do not download the audio stream
 
@@ -1041,7 +1045,10 @@ func main() {
 	} else if quiet {
 		loglevel = LoglevelQuiet
 	}
-	log.SetPrefix("\r")
+
+	if !statusNewlines {
+		log.SetPrefix("\r")
+	}
 
 	if forceIPv4 {
 		networkType = NetworkIPv4
