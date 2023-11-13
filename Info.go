@@ -317,8 +317,8 @@ func (di *DownloadInfo) SetDownloadUrl(dataType, dlURL string) {
 }
 
 func (di *DownloadInfo) GetMimeType(dataType string) string {
-	di.MDLInfo[dataType].Lock()
-	defer di.MDLInfo[dataType].Unlock()
+	di.MDLInfo[dataType].RLock()
+	defer di.MDLInfo[dataType].RUnlock()
 
 	return di.MDLInfo[dataType].MimeType
 }
