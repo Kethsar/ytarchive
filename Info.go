@@ -100,6 +100,7 @@ type Fragment struct {
 	XHeadSeqNum int
 	Data        *bytes.Buffer
 	Slow        bool
+	MimeType    string
 }
 
 type seqChanInfo struct {
@@ -131,6 +132,12 @@ type MediaDLInfo struct {
 	DataType    string
 	Finished    bool
 	URLHost     string
+	MimeType    string
+}
+
+type StreamInfo struct {
+	URL      string
+	MimeType string
 }
 
 /*
@@ -285,6 +292,12 @@ func (di *DownloadInfo) DecrementJobs(dataType string) {
 	di.MDLInfo[dataType].ActiveJobs -= 1
 }
 
+// Helper function to set both download URL and mimetype from StreamInfo
+func (di *DownloadInfo) SetStreamInfo(dataType string, streamInfo StreamInfo) {
+	di.SetDownloadUrl(dataType, streamInfo.URL)
+	di.SetMimeType(dataType, streamInfo.MimeType)
+}
+
 func (di *DownloadInfo) GetDownloadUrl(dataType string) string {
 	di.MDLInfo[dataType].RLock()
 	defer di.MDLInfo[dataType].RUnlock()
@@ -301,6 +314,20 @@ func (di *DownloadInfo) SetDownloadUrl(dataType, dlURL string) {
 	}
 
 	di.MDLInfo[dataType].DownloadURL = dlURL
+}
+
+func (di *DownloadInfo) GetMimeType(dataType string) string {
+	di.MDLInfo[dataType].Lock()
+	defer di.MDLInfo[dataType].Unlock()
+
+	return di.MDLInfo[dataType].MimeType
+}
+
+func (di *DownloadInfo) SetMimeType(dataType, mimeType string) {
+	di.MDLInfo[dataType].Lock()
+	defer di.MDLInfo[dataType].Unlock()
+
+	di.MDLInfo[dataType].MimeType = mimeType
 }
 
 func (di *DownloadInfo) GetDownloadUrlHost(dataType string) string {
@@ -457,7 +484,7 @@ func (di *DownloadInfo) GetGvideoUrl(dataType string) {
 		}
 
 		newUrl, itag := ParseGvideoUrl(gvUrl, dataType)
-		if len(newUrl) == 0 {
+		if len(newUrl.URL) == 0 {
 			continue
 		}
 
@@ -467,7 +494,7 @@ func (di *DownloadInfo) GetGvideoUrl(dataType string) {
 
 		if (dataType == DtypeAudio && itag == AudioItag) ||
 			(dataType == DtypeVideo && itag != AudioItag) {
-			di.SetDownloadUrl(dataType, newUrl)
+			di.SetStreamInfo(dataType, newUrl)
 			break
 		} else {
 			LogGeneral("URL given does not appear to be appropriate for the data type needed.")
@@ -532,6 +559,7 @@ func (di *DownloadInfo) ParseInputUrl() error {
 
 		di.GVideoDDL = true
 		id := parsedQuery.Get("id")
+		mimeType := parsedQuery.Get("mime")
 		dotIdx := strings.LastIndex(id, ".")
 		id = id[:dotIdx]
 		di.VideoID = id
@@ -549,7 +577,7 @@ func (di *DownloadInfo) ParseInputUrl() error {
 
 		if itag == AudioItag {
 			if len(di.GetDownloadUrl(DtypeAudio)) == 0 {
-				di.SetDownloadUrl(DtypeAudio, di.URL[:sqIdx]+"&sq=%d")
+				di.SetStreamInfo(DtypeAudio, StreamInfo{di.URL[:sqIdx] + "&sq=%d", mimeType})
 			}
 
 			if len(di.GetDownloadUrl(DtypeVideo)) == 0 && !di.AudioOnly {
@@ -557,7 +585,7 @@ func (di *DownloadInfo) ParseInputUrl() error {
 			}
 		} else {
 			if len(di.GetDownloadUrl(DtypeVideo)) == 0 {
-				di.SetDownloadUrl(DtypeVideo, di.URL[:sqIdx]+"&sq=%d")
+				di.SetStreamInfo(DtypeVideo, StreamInfo{di.URL[:sqIdx] + "&sq=%d", mimeType})
 			}
 
 			if len(di.GetDownloadUrl(DtypeAudio)) == 0 && !di.VideoOnly {
@@ -579,8 +607,8 @@ Attempts to grab from an Android player response as well as desktop,
 favouring Android. Any formats not found in Android are looked for in the
 desktop player response.
 */
-func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
-	urls := make(map[int]string)
+func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]StreamInfo {
+	urls := make(map[int]StreamInfo)
 	androidPR, err := di.DownloadAndroidPlayerResponse()
 
 	if err != nil {
@@ -595,7 +623,7 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 			}
 
 			for itag := range urls {
-				LogTrace("Setting itag %d from Android DASH manifest", itag)
+				LogTrace("Setting itag %d (%s) from Android DASH manifest", itag, urls[itag].MimeType)
 			}
 		}
 
@@ -609,8 +637,9 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 					continue
 				}
 
-				urls[fmt.Itag] = strings.ReplaceAll(fmt.URL, "%", "%%") + "&sq=%d"
-				LogTrace("Setting itag %d from Android adaptive formats", fmt.Itag)
+				mimetype := strings.SplitN(fmt.MimeType, ";", 2)[0]
+				urls[fmt.Itag] = StreamInfo{strings.ReplaceAll(fmt.URL, "%", "%%") + "&sq=%d", mimetype}
+				LogTrace("Setting itag %d (%s) from Android adaptive formats", fmt.Itag, mimetype)
 			}
 		}
 	}
@@ -631,7 +660,7 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 				}
 
 				urls[itag] = url
-				LogTrace("Setting itag %d from web adaptive formats", itag)
+				LogTrace("Setting itag %d (%s) from web DASH manifest", itag, urls[itag].MimeType)
 			}
 		}
 	}
@@ -646,8 +675,9 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 				continue
 			}
 
-			urls[fmt.Itag] = strings.ReplaceAll(fmt.URL, "%", "%%") + "&sq=%d"
-			LogTrace("Setting itag %d from web adaptive formats", fmt.Itag)
+			mimetype := strings.SplitN(fmt.MimeType, ";", 2)[0]
+			urls[fmt.Itag] = StreamInfo{strings.ReplaceAll(fmt.URL, "%", "%%") + "&sq=%d", mimetype}
+			LogTrace("Setting itag %d (%s) from web adaptive formats", fmt.Itag, mimetype)
 		}
 	}
 
@@ -732,12 +762,12 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 				aonly := videoItag.VP9 == AudioOnlyQuality
 
 				if !di.VideoOnly {
-					di.SetDownloadUrl(DtypeAudio, dlUrls[AudioItag])
+					di.SetStreamInfo(DtypeAudio, dlUrls[AudioItag])
 				}
 
 				if aonly {
 					di.Quality = AudioOnlyQuality
-					di.SetDownloadUrl(DtypeVideo, "")
+					di.SetStreamInfo(DtypeVideo, StreamInfo{})
 					found = true
 					break
 				}
@@ -746,13 +776,13 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 				_, h264Ok := dlUrls[videoItag.H264]
 
 				if vp9Ok && (di.VP9 || !h264Ok) && !di.H264 { // Sometimes a quality is VP9 only apparently
-					di.SetDownloadUrl(DtypeVideo, dlUrls[videoItag.VP9])
+					di.SetStreamInfo(DtypeVideo, dlUrls[videoItag.VP9])
 					di.Quality = videoItag.VP9
 					found = true
 					LogGeneral("Selected quality: %s (VP9)\n", q)
 					break
 				} else if h264Ok {
-					di.SetDownloadUrl(DtypeVideo, dlUrls[videoItag.H264])
+					di.SetStreamInfo(DtypeVideo, dlUrls[videoItag.H264])
 					di.Quality = videoItag.H264
 					found = true
 					LogGeneral("Selected quality: %s (h264)\n", q)
@@ -776,14 +806,14 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 		aonly := di.Quality == AudioOnlyQuality
 		_, audioOk := dlUrls[AudioItag]
 
-		if !di.VideoOnly && audioOk && IsFragmented(dlUrls[AudioItag]) {
-			di.SetDownloadUrl(DtypeAudio, dlUrls[AudioItag])
+		if !di.VideoOnly && audioOk && IsFragmented(dlUrls[AudioItag].URL) {
+			di.SetStreamInfo(DtypeAudio, dlUrls[AudioItag])
 		}
 
 		if !aonly {
 			_, vidOk := dlUrls[di.Quality]
-			if vidOk && IsFragmented(dlUrls[di.Quality]) {
-				di.SetDownloadUrl(DtypeVideo, dlUrls[di.Quality])
+			if vidOk && IsFragmented(dlUrls[di.Quality].URL) {
+				di.SetStreamInfo(DtypeVideo, dlUrls[di.Quality])
 			}
 		}
 	}
@@ -807,6 +837,7 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 	state.FullRetries = 3
 	state.Is403 = false
 	fname := fmt.Sprintf("%s.frag%d.ts", state.BaseFilePath, state.SeqNum)
+	mimeType := di.GetMimeType(state.DataType)
 
 	for state.Tries < int(di.FragMaxTries) || di.FragMaxTries == 0 {
 		if di.IsStopping() {
@@ -935,6 +966,7 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 			FileName:    fname,
 			Data:        data,
 			Slow:        isSlow,
+			MimeType:    mimeType,
 		}
 
 		return
@@ -1156,7 +1188,20 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 			buf := make([]byte, BufferSize)
 
 			rc, _ := data.Data.Read(buf)
-			count, err := f.Write(RemoveSidx(buf[:rc]))
+
+			writeBuf := buf
+			// ffmpeg doesn't like certain atoms in concatenated MP4 files, so we remove those here
+			// If MimeType is blank, assume MP4
+			if strings.HasSuffix(data.MimeType, "/mp4") || data.MimeType == "" {
+				badAtoms := []string{"sidx"}
+				// ffmpeg 6.1 doesn't like multiple ftyp atoms, so only allow on the first fragment
+				if curFrag != startFrag {
+					badAtoms = append(badAtoms, "ftyp")
+				}
+				writeBuf = RemoveAtoms(buf[:rc], badAtoms...)
+			}
+
+			count, err := f.Write(writeBuf)
 			bytesWritten += count
 
 			if err != nil {
