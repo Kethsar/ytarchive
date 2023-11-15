@@ -837,7 +837,6 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 	state.FullRetries = 3
 	state.Is403 = false
 	fname := fmt.Sprintf("%s.frag%d.ts", state.BaseFilePath, state.SeqNum)
-	mimeType := di.GetMimeType(state.DataType)
 
 	for state.Tries < int(di.FragMaxTries) || di.FragMaxTries == 0 {
 		if di.IsStopping() {
@@ -933,6 +932,11 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 
 		if len(headerSeqnumStr) > 0 {
 			headerSeqnum, _ = strconv.Atoi(headerSeqnumStr)
+		}
+
+		mimeType := resp.Header.Get("Content-Type")
+		if !strings.HasSuffix(mimeType, "/mp4") && !strings.HasSuffix(mimeType, "/webm") {
+			LogTrace("%s: fragment %d has unknown MIME type '%s'", state.Name, state.SeqNum, mimeType)
 		}
 
 		if state.ToFile {
