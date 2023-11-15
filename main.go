@@ -341,8 +341,8 @@ var (
 	info              *DownloadInfo
 	cookieFile        string
 	fnameFormat       string
-	gvAudioUrl        StreamInfo
-	gvVideoUrl        StreamInfo
+	gvAudioUrl        string
+	gvVideoUrl        string
 	ffmpegPath        string
 	proxyUrl          *url.URL
 	threadCount       uint
@@ -563,17 +563,17 @@ func run() int {
 		}
 	}
 
-	if len(gvVideoUrl.URL) > 0 {
-		info.URL = gvVideoUrl.URL
-		info.SetStreamInfo(DtypeVideo, gvVideoUrl)
+	if len(gvVideoUrl) > 0 {
+		info.URL = gvVideoUrl
+		info.SetDownloadUrl(DtypeVideo, gvVideoUrl)
 	}
 
-	if len(gvAudioUrl.URL) > 0 {
+	if len(gvAudioUrl) > 0 {
 		if len(info.URL) == 0 {
-			info.URL = gvAudioUrl.URL
+			info.URL = gvAudioUrl
 		}
 
-		info.SetStreamInfo(DtypeAudio, gvAudioUrl)
+		info.SetDownloadUrl(DtypeAudio, gvAudioUrl)
 	}
 
 	if len(info.URL) == 0 {

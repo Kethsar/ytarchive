@@ -27,12 +27,7 @@ import (
 )
 
 type MPD struct {
-	AdaptationSets []AdaptationSet `xml:"Period>AdaptationSet"`
-}
-
-type AdaptationSet struct {
-	MimeType        string           `xml:"mimeType,attr"`
-	Representations []Representation `xml:"Representation"`
+	Representations []Representation `xml:"Period>AdaptationSet>Representation"`
 }
 
 // DASH Manifest element containing Youtube's media ID and a download URL
@@ -446,8 +441,8 @@ func IsFragmented(url string) bool {
 }
 
 // Prase the DASH manifest XML and get the download URLs from it
-func GetUrlsFromManifest(manifest []byte) (map[int]StreamInfo, int) {
-	urls := make(map[int]StreamInfo)
+func GetUrlsFromManifest(manifest []byte) (map[int]string, int) {
+	urls := make(map[int]string)
 	var mpd MPD
 
 	err := xml.Unmarshal(manifest, &mpd)
@@ -458,34 +453,32 @@ func GetUrlsFromManifest(manifest []byte) (map[int]StreamInfo, int) {
 
 	lastSq := -1
 
-	for _, a := range mpd.AdaptationSets {
-		for _, r := range a.Representations {
-			itag, err := strconv.Atoi(r.Id)
-			if err != nil {
-				continue
-			}
+	for _, r := range mpd.Representations {
+		itag, err := strconv.Atoi(r.Id)
+		if err != nil {
+			continue
+		}
 
-			sl := r.SegmentList
-			if len(sl) > 0 {
-				lastMedia := sl[len(sl)-1].Media
-				paths := strings.Split(lastMedia, "/")
-				for i, ps := range paths {
-					if ps == "sq" && len(paths) >= i+1 {
-						lastSqC, err := strconv.Atoi(paths[i+1])
-						if err != nil {
-							lastSqC = -1
-						}
-						if lastSq < lastSqC {
-							lastSq = lastSqC
-						}
-						break
+		sl := r.SegmentList
+		if len(sl) > 0 {
+			lastMedia := sl[len(sl)-1].Media
+			paths := strings.Split(lastMedia, "/")
+			for i, ps := range paths {
+				if ps == "sq" && len(paths) >= i+1 {
+					lastSqC, err := strconv.Atoi(paths[i+1])
+					if err != nil {
+						lastSqC = -1
 					}
+					if lastSq < lastSqC {
+						lastSq = lastSqC
+					}
+					break
 				}
 			}
+		}
 
-			if itag > 0 && len(r.BaseURL) > 0 {
-				urls[itag] = StreamInfo{strings.ReplaceAll(r.BaseURL, "%", "%%") + "sq/%d", a.MimeType}
-			}
+		if itag > 0 && len(r.BaseURL) > 0 {
+			urls[itag] = strings.ReplaceAll(r.BaseURL, "%", "%%") + "sq/%d"
 		}
 	}
 
@@ -566,8 +559,8 @@ func GetVideoIdFromWatchPage(data []byte) string {
 	return string(data[startIdx:endIdx])
 }
 
-func ParseGvideoUrl(gvUrl, dataType string) (StreamInfo, int) {
-	var newUrl StreamInfo
+func ParseGvideoUrl(gvUrl, dataType string) (string, int) {
+	var newUrl string
 	parsedUrl, err := url.Parse(gvUrl)
 	if err != nil {
 		LogError("Error parsing Google Video URL: %s", err)
@@ -601,8 +594,7 @@ func ParseGvideoUrl(gvUrl, dataType string) (StreamInfo, int) {
 		sqIndex = len(gvUrl)
 	}
 
-	newUrl.URL = gvUrl[:sqIndex] + "&sq=%d"
-	newUrl.MimeType = parsedUrl.Query().Get("mime")
+	newUrl = gvUrl[:sqIndex] + "&sq=%d"
 	return newUrl, itag
 }
 
