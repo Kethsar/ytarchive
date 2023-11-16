@@ -19,6 +19,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -533,12 +534,22 @@ func GetAtoms(data []byte) map[string]Atom {
 func RemoveAtoms(data []byte, atomList ...string) []byte {
 	atoms := GetAtoms(data)
 
+	var atomsToRemove []Atom
 	for _, atomName := range atomList {
 		atom, ok := atoms[atomName]
 		if !ok {
 			continue
 		}
+		atomsToRemove = append(atomsToRemove, atom)
+	}
 
+	// Sort atoms by byte offset in descending order,
+	// this lets us remove them in order without affecting the next atom's offset
+	sort.Slice(atomsToRemove, func(i, j int) bool {
+		return atomsToRemove[i].Offset > atomsToRemove[j].Offset
+	})
+
+	for _, atom := range atomsToRemove {
 		ofs := atom.Offset
 		rlen := atom.Offset + atom.Length
 		data = append(data[:ofs], data[rlen:]...)
