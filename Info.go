@@ -100,6 +100,7 @@ type Fragment struct {
 	XHeadSeqNum int
 	Data        *bytes.Buffer
 	Slow        bool
+	MimeType    string
 }
 
 type seqChanInfo struct {
@@ -904,6 +905,11 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 			headerSeqnum, _ = strconv.Atoi(headerSeqnumStr)
 		}
 
+		mimeType := resp.Header.Get("Content-Type")
+		if !strings.HasSuffix(mimeType, "/mp4") && !strings.HasSuffix(mimeType, "/webm") {
+			LogTrace("%s: fragment %d has unknown MIME type '%s'", state.Name, state.SeqNum, mimeType)
+		}
+
 		if state.ToFile {
 			err = os.WriteFile(fname, respData, 0644)
 			if err != nil {
@@ -935,6 +941,7 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 			FileName:    fname,
 			Data:        data,
 			Slow:        isSlow,
+			MimeType:    mimeType,
 		}
 
 		return
@@ -1156,7 +1163,20 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 			buf := make([]byte, BufferSize)
 
 			rc, _ := data.Data.Read(buf)
-			count, err := f.Write(RemoveSidx(buf[:rc]))
+
+			writeBuf := buf
+			// ffmpeg doesn't like certain atoms in concatenated MP4 files, so we remove those here
+			// If MimeType is blank, assume MP4
+			if strings.HasSuffix(data.MimeType, "/mp4") || data.MimeType == "" {
+				badAtoms := []string{"sidx"}
+				// ffmpeg 6.1 doesn't like multiple ftyp atoms, so only allow on the first fragment
+				if curFrag != startFrag {
+					badAtoms = append(badAtoms, "ftyp")
+				}
+				writeBuf = RemoveAtoms(buf[:rc], badAtoms...)
+			}
+
+			count, err := f.Write(writeBuf)
 			bytesWritten += count
 
 			if err != nil {

@@ -530,19 +530,21 @@ func GetAtoms(data []byte) map[string]Atom {
 	return atoms
 }
 
-func RemoveSidx(data []byte) []byte {
+func RemoveAtoms(data []byte, atomList ...string) []byte {
 	atoms := GetAtoms(data)
-	sidx, ok := atoms["sidx"]
 
-	if !ok {
-		return data
+	for _, atomName := range atomList {
+		atom, ok := atoms[atomName]
+		if !ok {
+			continue
+		}
+
+		ofs := atom.Offset
+		rlen := atom.Offset + atom.Length
+		data = append(data[:ofs], data[rlen:]...)
 	}
 
-	ofs := sidx.Offset
-	rlen := sidx.Offset + sidx.Length
-	newData := append(data[:ofs], data[rlen:]...)
-
-	return newData
+	return data
 }
 
 func GetVideoIdFromWatchPage(data []byte) string {
