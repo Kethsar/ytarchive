@@ -135,9 +135,6 @@ type YtInitialData struct {
 						Richgridrenderer struct {
 							Contents []RichGridContent `json:"contents"`
 						} `json:"richGridRenderer"`
-						SectionListRenderer struct {
-							Contents []SectionListContent `json:"contents"`
-						} `json:"sectionListRenderer"`
 					} `json:"content"`
 				} `json:"tabRenderer"`
 			} `json:"tabs"`
@@ -155,24 +152,14 @@ type RichGridContent struct {
 						Style string `json:"style"`
 					} `json:"thumbnailOverlayTimeStatusRenderer"`
 				} `json:"thumbnailOverlays"`
+				Badges []struct {
+					Metadatabadgerenderer struct {
+						Style string `json:"style"`
+					} `json:"metadataBadgeRenderer"`
+				} `json:"badges"`
 			} `json:"videoRenderer"`
 		} `json:"content"`
 	} `json:"richItemRenderer"`
-}
-
-type SectionListContent struct {
-	ItemSectionRenderer struct {
-		Contents []struct {
-			Videorenderer struct {
-				Videoid           string `json:"videoId"`
-				Thumbnailoverlays []struct {
-					Thumbnailoverlaytimestatusrenderer struct {
-						Style string `json:"style"`
-					} `json:"thumbnailOverlayTimeStatusRenderer"`
-				} `json:"thumbnailOverlays"`
-			} `json:"videoRenderer"`
-		} `json:"contents"`
-	} `json:"itemSectionRenderer"`
 }
 
 // Search the given HTML for the player response object
@@ -217,13 +204,19 @@ func GetJsonFromHtml(htmlData []byte, jsonDecl []byte) []byte {
 	}
 }
 
-func GetNewestStreamFromStreams(liveUrl string) string {
+func (di *DownloadInfo) GetNewestStreamFromStreams() string {
+	// Surely there won't be more than 5 simultaneous streams when looking for membership streams, right?
+	const MAX_STREAM_ITEM_CHECK = 5
+	streamUrl := ""
+	if !di.LiveURL {
+		return streamUrl
+	}
+
 	initialData := &YtInitialData{}
 	var contents []RichGridContent
-	streamsUrl := strings.Replace(liveUrl, "/live", "/streams", 1)
+	streamsUrl := strings.Replace(di.URL, "/live", "/streams", 1)
 	streamsHtml := DownloadData(streamsUrl)
 	ytInitialData := GetJsonFromHtml(streamsHtml, ytInitialDataDecl)
-	streamUrl := ""
 
 	err := json.Unmarshal(ytInitialData, initialData)
 	if err != nil {
@@ -236,8 +229,25 @@ func GetNewestStreamFromStreams(liveUrl string) string {
 		}
 	}
 
-	for _, content := range contents {
+	for i, content := range contents {
+		if i >= MAX_STREAM_ITEM_CHECK {
+			break
+		}
+
 		videoRenderer := content.Richitemrenderer.Content.Videorenderer
+		if di.MembersOnly {
+			mengen := false
+			for _, badge := range videoRenderer.Badges {
+				if badge.Metadatabadgerenderer.Style == "BADGE_STYLE_TYPE_MEMBERS_ONLY" {
+					mengen = true
+					break
+				}
+			}
+
+			if !mengen {
+				continue
+			}
+		}
 
 		for _, thumbnailRenderer := range videoRenderer.Thumbnailoverlays {
 			if thumbnailRenderer.Thumbnailoverlaytimestatusrenderer.Style == "LIVE" {
@@ -315,18 +325,14 @@ func (di *DownloadInfo) GetVideoHtml() []byte {
 	var videoHtml []byte
 
 	if di.LiveURL {
-		streamUrl := ""
-
-		if len(streamUrl) == 0 {
-			streamUrl = GetNewestStreamFromStreams(di.URL)
-		}
+		streamUrl := di.GetNewestStreamFromStreams()
 
 		if len(streamUrl) > 0 {
 			videoHtml = DownloadData(streamUrl)
 		}
 	}
 
-	if len(videoHtml) == 0 {
+	if len(videoHtml) == 0 && !di.MembersOnly {
 		videoHtml = DownloadData(di.URL)
 	}
 
@@ -581,6 +587,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 			// player response returned from /live does not include full information
 			if isLiveURL {
 				di.URL = fmt.Sprintf("https://www.youtube.com/watch?v=%s", di.VideoID)
+				di.MembersOnly = false
 				isLiveURL = false
 				continue
 			}

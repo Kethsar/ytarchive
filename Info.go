@@ -164,6 +164,7 @@ type DownloadInfo struct {
 	LiveURL     bool
 	AudioOnly   bool
 	VideoOnly   bool
+	MembersOnly bool
 	InfoPrinted bool
 
 	Thumbnail       string

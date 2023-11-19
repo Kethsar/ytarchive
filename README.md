@@ -70,6 +70,11 @@ Options:
 		Keep the final stream audio and video files after muxing them
 		instead of deleting them.
 
+	--members-only
+		Only download members-only streams. Can only be used with channel URLs
+		such as /live, /streams, etc, and requires cookies.
+		Useful when monitoring channels and you only want membership streams.
+
 	--merge
 		Automatically run the ffmpeg command for the downloaded streams
 		when manually cancelling the download. You will be prompted otherwise.
@@ -94,6 +99,10 @@ Options:
 		input if selected quality is not available for certain streams.
 		Be careful to monitor your disk usage when using this to avoid filling
 		your drive while away.
+
+	--newline
+		Print every message to a new line, instead of some messages reusing one
+		line.
 
 	--no-audio
 		Do not download the audio stream
