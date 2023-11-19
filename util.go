@@ -19,6 +19,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -530,19 +531,31 @@ func GetAtoms(data []byte) map[string]Atom {
 	return atoms
 }
 
-func RemoveSidx(data []byte) []byte {
+func RemoveAtoms(data []byte, atomList ...string) []byte {
 	atoms := GetAtoms(data)
-	sidx, ok := atoms["sidx"]
 
-	if !ok {
-		return data
+	var atomsToRemove []Atom
+	for _, atomName := range atomList {
+		atom, ok := atoms[atomName]
+		if !ok {
+			continue
+		}
+		atomsToRemove = append(atomsToRemove, atom)
 	}
 
-	ofs := sidx.Offset
-	rlen := sidx.Offset + sidx.Length
-	newData := append(data[:ofs], data[rlen:]...)
+	// Sort atoms by byte offset in descending order,
+	// this lets us remove them in order without affecting the next atom's offset
+	sort.Slice(atomsToRemove, func(i, j int) bool {
+		return atomsToRemove[i].Offset > atomsToRemove[j].Offset
+	})
 
-	return newData
+	for _, atom := range atomsToRemove {
+		ofs := atom.Offset
+		rlen := atom.Offset + atom.Length
+		data = append(data[:ofs], data[rlen:]...)
+	}
+
+	return data
 }
 
 func GetVideoIdFromWatchPage(data []byte) string {
