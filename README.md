@@ -12,6 +12,8 @@ Download the latest pre-release from [the releases page](https://github.com/Keth
 
 Alternatively, if you have Go properly installed and set up, run `go install github.com/Kethsar/ytarchive@dev`
 
+If you use Homebrew, you can install it with `brew install holoarchivists/tap/ytarchive`
+
 ## Usage
 
 ```
