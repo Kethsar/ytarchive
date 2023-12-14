@@ -24,11 +24,12 @@ const (
 	'context': {
 		'client': {
 			'clientName': 'ANDROID',
-			'clientVersion': '16.20',
+			'clientVersion': '17.31.35',
 			'hl': 'en'
 		}
 	},
 	'videoId': '%s',
+	'params': 'CgIQBg==',
 	'playbackContext': {
 		'contentPlaybackContext': {
 			'html5Preference': 'HTML5_PREF_WANTS'
@@ -274,7 +275,7 @@ func (di *DownloadInfo) DownloadAndroidPlayerResponse() (*PlayerResponse, error)
 	}
 
 	req.Header.Add("X-YouTube-Client-Name", "3")
-	req.Header.Add("X-YouTube-Client-Version", "16.20")
+	req.Header.Add("X-YouTube-Client-Version", "17.31.35")
 	req.Header.Add("Origin", "https://www.youtube.com")
 	req.Header.Add("content-type", "application/json")
 
