@@ -589,7 +589,7 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 			if isLiveURL {
 				di.URL = fmt.Sprintf("https://www.youtube.com/watch?v=%s", di.VideoID)
 				di.MembersOnly = false
-				isLiveURL = false
+				di.LiveURL = false
 				continue
 			}
 
