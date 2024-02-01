@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/alessio/shellescape"
 )
@@ -1064,12 +1065,19 @@ func main() {
 		networkType = NetworkIPv6
 	}
 
+	lastExitTime := time.Now()
 	PrintVersion()
 	for {
 		retcode = run()
 		if cancelled || !monitorChannel || !info.LiveURL {
 			break
 		}
+
+		if time.Since(lastExitTime) < (time.Duration(info.RetrySecs) * time.Second) {
+			LogDebug("Last run exited before the set wait time. Waiting before running again...")
+			time.Sleep(time.Duration(info.RetrySecs) * time.Second)
+		}
+		lastExitTime = time.Now()
 	}
 
 	Exit(retcode)
