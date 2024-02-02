@@ -375,7 +375,7 @@ func (di *DownloadInfo) GetPlayerResponse(videoHtml []byte) (*PlayerResponse, er
 func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerResponse, selectedQualities []string) {
 	firstWait := true
 	isLiveURL := di.LiveURL
-	waitOnLiveURL := isLiveURL && di.RetrySecs > 0
+	waitOnLiveURL := isLiveURL && di.RetrySecs > 0 && !di.InProgress
 	liveWaited := 0
 	retryCount := 0
 	var secsLate int
