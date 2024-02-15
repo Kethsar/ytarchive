@@ -791,6 +791,7 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 	}
 
 	if !di.InProgress {
+		LogGeneral("Stream started at time %s", pmfr.LiveBroadcastDetails.StartTimestamp)
 		di.FormatInfo.SetInfo(pr)
 		di.Metadata.SetInfo(di.FormatInfo)
 		if len(pmfr.Thumbnail.Thumbnails) > 0 {
