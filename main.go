@@ -176,6 +176,12 @@ Options:
 		See FORMAT OPTIONS below for a list of available format keys.
 		Default is '%[3]s'
 
+	-td
+	--temporary-dir DIRECTORY
+		Set the working directory for the download. This is where the
+		temporary files will be stored. If not set, the output directory
+		will be used.
+
 	--proxy <SCHEME>://[<USER>:<PASS>@]<HOST>:<PORT>
 		Specify a proxy to use for downloading. e.g.
 			- socks5://127.0.0.1:1080
@@ -349,6 +355,7 @@ var (
 	fnameFormat       string
 	gvAudioUrl        string
 	gvVideoUrl        string
+	tempDir           string
 	ffmpegPath        string
 	proxyUrl          *url.URL
 	threadCount       uint
@@ -444,6 +451,8 @@ func init() {
 	cliFlags.StringVar(&cookieFile, "cookies", "", "Cookies to be used when downloading.")
 	cliFlags.StringVar(&fnameFormat, "o", DefaultFilenameFormat, "Filename output format.")
 	cliFlags.StringVar(&fnameFormat, "output", DefaultFilenameFormat, "Filename output format.")
+	cliFlags.StringVar(&tempDir, "td", "", "Temporary directory for downloading files.")
+	cliFlags.StringVar(&tempDir, "temporary-dir", "", "Temporary directory for downloading files.")
 	cliFlags.StringVar(&ffmpegPath, "ffmpeg-path", "ffmpeg", "Specify a custom ffmpeg program location, including program name.")
 	cliFlags.IntVar(&retrySecs, "r", 0, "Seconds to wait between checking stream status.")
 	cliFlags.IntVar(&retrySecs, "retry-stream", 0, "Seconds to wait between checking stream status.")
@@ -667,8 +676,17 @@ func run() int {
 		}
 	}
 
-	info.DLState[AudioItag].File = filepath.Join(fdir, fmt.Sprintf("%s.f%d.state", info.VideoID, AudioItag))
-	info.DLState[info.Quality].File = filepath.Join(fdir, fmt.Sprintf("%s.f%d.state", info.VideoID, info.Quality))
+	if len(tempDir) > 0 && tempDir != "." {
+		err = os.MkdirAll(tempDir, info.DirMode)
+		if err != nil {
+			LogWarn("Error creating temporary directory: %s", err)
+			LogWarn("Temporary files will be placed in the current working directory")
+			tempDir = "."
+		}
+	}
+
+	info.DLState[AudioItag].File = filepath.Join(tempDir, fmt.Sprintf("%s.f%d.state", info.VideoID, AudioItag))
+	info.DLState[info.Quality].File = filepath.Join(tempDir, fmt.Sprintf("%s.f%d.state", info.VideoID, info.Quality))
 	if Exists(info.DLState[AudioItag].File) {
 		stateData, err := os.ReadFile(info.DLState[AudioItag].File)
 		if err == nil {
@@ -689,7 +707,12 @@ func run() int {
 	}
 
 	if len(tmpDir) == 0 {
-		tmpDir, err = os.MkdirTemp(fdir, fmt.Sprintf("%s__", info.VideoID))
+		if len(tempDir) == 0 {
+			tmpDir = fdir
+		} else {
+			tmpDir = tempDir
+		}
+		tmpDir, err = os.MkdirTemp(tmpDir, fmt.Sprintf("%s__", info.VideoID))
 		if err != nil {
 			LogWarn("Error creating temp directory: %s", err)
 			LogWarn("Will download data directly to %s instead", fdir)
