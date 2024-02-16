@@ -182,6 +182,16 @@ Options:
 		temporary files will be stored. If not set, the output directory
 		will be used.
 
+	-dp
+	--directory-permissions PERMISSIONS
+		Set the filesystem permissions for created directories.
+		Default is 0755.
+
+	-fp
+	--file-permissions PERMISSIONS
+		Set the filesystem permissions for created files.
+		Default is 0644.
+
 	--proxy <SCHEME>://[<USER>:<PASS>@]<HOST>:<PORT>
 		Specify a proxy to use for downloading. e.g.
 			- socks5://127.0.0.1:1080
@@ -360,6 +370,8 @@ var (
 	proxyUrl          *url.URL
 	threadCount       uint
 	fragMaxTries      uint
+	filePerms         uint
+	dirPerms          uint
 	retrySecs         int
 	downloadThumbnail bool
 	addMeta           bool
@@ -458,6 +470,10 @@ func init() {
 	cliFlags.IntVar(&retrySecs, "retry-stream", 0, "Seconds to wait between checking stream status.")
 	cliFlags.UintVar(&threadCount, "threads", 1, "Number of download threads for each stream type.")
 	cliFlags.UintVar(&fragMaxTries, "retry-frags", 10, "Number of attempts to make when downloading stream fragments before stopping.")
+	cliFlags.UintVar(&dirPerms, "dp", 0755, "Filesystem permissions for the created directories.")
+	cliFlags.UintVar(&dirPerms, "directory-permissions", 0755, "Filesystem permissions for the created directories.")
+	cliFlags.UintVar(&filePerms, "fp", 0644, "Filesystem permissions for the created files.")
+	cliFlags.UintVar(&filePerms, "file-permissions", 0644, "Filesystem permissions for the created files.")
 
 	cliFlags.Func("video-url", "Googlevideo URL for the video stream.", func(s string) error {
 		var itag int
@@ -526,6 +542,8 @@ func run() int {
 	info.RetrySecs = retrySecs
 	info.FragMaxTries = fragMaxTries
 	info.MembersOnly = membersOnly
+	info.FileMode = os.FileMode(filePerms)
+	info.DirMode = os.FileMode(dirPerms)
 
 	if doWait {
 		info.Wait = ActionDo
@@ -668,7 +686,7 @@ func run() int {
 	}
 
 	if fdir != "." {
-		err = os.MkdirAll(fdir, 0755)
+		err = os.MkdirAll(fdir, info.DirMode)
 		if err != nil {
 			LogWarn("Error creating final file directory: %s", err)
 			LogWarn("The final file will be placed in the current working directory")
@@ -762,7 +780,7 @@ func run() int {
 	}
 
 	if (downloadThumbnail || writeThumbnail) && len(info.Thumbnail) > 0 {
-		downloaded := DownloadThumbnail(info.Thumbnail, thmbnlFile)
+		downloaded := DownloadThumbnail(info.Thumbnail, thmbnlFile, info.FileMode)
 
 		if !downloaded {
 			TryDelete(thmbnlFile)
@@ -775,7 +793,7 @@ func run() int {
 	}
 
 	if writeDesc && len(info.Metadata["comment"]) > 0 {
-		err = os.WriteFile(descFile, []byte(info.Metadata["comment"]), 0644)
+		err = os.WriteFile(descFile, []byte(info.Metadata["comment"]), info.FileMode)
 
 		if err != nil {
 			LogWarn("Error writing description file: %s", err)
@@ -783,7 +801,7 @@ func run() int {
 		}
 	}
 
-	err = os.WriteFile(muxFile, []byte(ffmpegCmd), 0644)
+	err = os.WriteFile(muxFile, []byte(ffmpegCmd), info.FileMode)
 	if err != nil {
 		LogWarn("Failed to write initial mux file: %s", err)
 		TryDelete(muxFile)

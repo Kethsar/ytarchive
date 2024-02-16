@@ -352,7 +352,7 @@ func (di *DownloadInfo) GetPlayerResponse(videoHtml []byte) (*PlayerResponse, er
 	if len(prData) == 0 {
 		if debug && di.InProgress {
 			LogDebug("Could not find player response from video watch page. Writing html file to %s.html", di.VideoID)
-			os.WriteFile(fmt.Sprintf("%s.html", di.VideoID), videoHtml, 0644)
+			os.WriteFile(fmt.Sprintf("%s.html", di.VideoID), videoHtml, di.FileMode)
 		}
 		return nil, fmt.Errorf("unable to retrieve player response object from watch page")
 	}
