@@ -1,0 +1,33 @@
+version: '3'
+
+x-defaults:
+  &defaults
+  image: localhost/ytarchive
+  # restart: unless-stopped
+  # user: "1000:1000"
+  volumes:
+    # make sure to create these directories before running the stack and own them by the user above
+    - ./ytarchive/downloads:/downloads
+    - ./ytarchive/output:/output
+
+x-nocookies:
+  &nocookies
+  <<: *defaults
+  command: ["ytarchive -t --vp9 --monitor-channel --newline --no-frag-files -w -dp 0777 -fp 0666 -td \"/downloads\" -o \"/output/%(channel)s/%(upload_date)s_%(title)s\" \"$$URL\" best" ]
+
+x-withcookies:
+  &withcookies
+  <<: *defaults
+  command: ["ytarchive -c /cookies.txt -t --vp9 --monitor-channel --newline --no-frag-files -w -dp 0777 -fp 0666 -td \"/downloads\" -o \"/output/%(channel)s/%(upload_date)s_%(title)s\" \"$$URL\" best" ]
+  volumes:
+    - ./ytarchive/cookies.txt:/cookies.txt:ro
+
+services:
+  somechannel:
+    <<: *nocookies
+    environment:
+      - URL=https://www.youtube.com/@somechannel/live
+  anotherchannel:
+    <<: *withcookies
+    environment:
+      - URL=https://www.youtube.com/@anotherchannel/live

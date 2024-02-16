@@ -12,6 +12,22 @@ Download the latest pre-release from [the releases page](https://github.com/Keth
 
 Alternatively, if you have Go properly installed and set up, run `go install github.com/Kethsar/ytarchive@dev`
 
+To use it with docker, build an image with `docker build . -t localhost/ytarchive`.
+Afterwards you can start a container and pass in a command as explained in the next section:
+```
+docker run --name ytarchive -v ./output:/output localhost/ytarchive ytarchive [OPTIONS] [url] [quality]`
+```
+
+Or start the container in interactive mode:
+```
+docker run -it --rm -v ./output:/output localhost/ytarchive ytarchive
+```
+
+Or adjust the `docker-compose.yml` to your needs and run a stack with multiple containers:
+```
+docker compose up -d
+```
+
 ## Usage
 
 ```

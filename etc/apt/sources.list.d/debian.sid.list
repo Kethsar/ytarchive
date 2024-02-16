@@ -1,0 +1,3 @@
+#Debian Sid kernel sources
+deb http://deb.debian.org/debian unstable main contrib non-free
+deb-src http://deb.debian.org/debian unstable main contrib non-free
