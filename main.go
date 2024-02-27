@@ -85,12 +85,24 @@ Options:
 	--debug
 		Print a lot of extra information.
 
+	-dp
+	--directory-permissions PERMISSIONS
+		Set the filesystem permissions for created directories. Uses unix
+		numeric notation. Be aware of umask settings for your directory.
+		Default is 0755.
+
 	--error
 		Print only errors and general information.
 
 	--ffmpeg-path FFMPEG_PATH
 		Set a specific ffmpeg location, including program name.
 		e.g. "C:\ffmpeg\ffmpeg.exe" or "/opt/ffmpeg/ffmpeg"
+
+	-fp
+	--file-permissions PERMISSIONS
+		Set the filesystem permissions for created files. Uses unix
+		numeric notation. Be aware of umask settings for your directory.
+		Default is 0644.
 
 	--h264
 		Only download h264 video, skipping VP9 if it would have been used.
@@ -216,6 +228,12 @@ Options:
 		Save the audio to a separate file, similar to when downloading
 		audio_only, alongside the final muxed file. This includes embedding
 		metadata and the thumbnail if set.
+
+	-td
+	--temporary-dir DIRECTORY
+		Set the working directory for the download. This is where the
+		temporary files will be stored. If not set, the output directory
+		will be used.
 
 	--threads THREAD_COUNT
 		Set the number of threads to use for downloading audio and video
@@ -349,10 +367,13 @@ var (
 	fnameFormat       string
 	gvAudioUrl        string
 	gvVideoUrl        string
+	tempDir           string
 	ffmpegPath        string
 	proxyUrl          *url.URL
 	threadCount       uint
 	fragMaxTries      uint
+	filePerms         uint
+	dirPerms          uint
 	retrySecs         int
 	downloadThumbnail bool
 	addMeta           bool
@@ -444,11 +465,17 @@ func init() {
 	cliFlags.StringVar(&cookieFile, "cookies", "", "Cookies to be used when downloading.")
 	cliFlags.StringVar(&fnameFormat, "o", DefaultFilenameFormat, "Filename output format.")
 	cliFlags.StringVar(&fnameFormat, "output", DefaultFilenameFormat, "Filename output format.")
+	cliFlags.StringVar(&tempDir, "td", "", "Temporary directory for downloading files.")
+	cliFlags.StringVar(&tempDir, "temporary-dir", "", "Temporary directory for downloading files.")
 	cliFlags.StringVar(&ffmpegPath, "ffmpeg-path", "ffmpeg", "Specify a custom ffmpeg program location, including program name.")
 	cliFlags.IntVar(&retrySecs, "r", 0, "Seconds to wait between checking stream status.")
 	cliFlags.IntVar(&retrySecs, "retry-stream", 0, "Seconds to wait between checking stream status.")
 	cliFlags.UintVar(&threadCount, "threads", 1, "Number of download threads for each stream type.")
 	cliFlags.UintVar(&fragMaxTries, "retry-frags", 10, "Number of attempts to make when downloading stream fragments before stopping.")
+	cliFlags.UintVar(&dirPerms, "dp", 0755, "Filesystem permissions for the created directories.")
+	cliFlags.UintVar(&dirPerms, "directory-permissions", 0755, "Filesystem permissions for the created directories.")
+	cliFlags.UintVar(&filePerms, "fp", 0644, "Filesystem permissions for the created files.")
+	cliFlags.UintVar(&filePerms, "file-permissions", 0644, "Filesystem permissions for the created files.")
 
 	cliFlags.Func("video-url", "Googlevideo URL for the video stream.", func(s string) error {
 		var itag int
@@ -517,6 +544,8 @@ func run() int {
 	info.RetrySecs = retrySecs
 	info.FragMaxTries = fragMaxTries
 	info.MembersOnly = membersOnly
+	info.FileMode = os.FileMode(filePerms)
+	info.DirMode = os.FileMode(dirPerms)
 
 	if doWait {
 		info.Wait = ActionDo
@@ -659,7 +688,7 @@ func run() int {
 	}
 
 	if fdir != "." {
-		err = os.MkdirAll(fdir, 0755)
+		err = os.MkdirAll(fdir, info.DirMode)
 		if err != nil {
 			LogWarn("Error creating final file directory: %s", err)
 			LogWarn("The final file will be placed in the current working directory")
@@ -667,8 +696,17 @@ func run() int {
 		}
 	}
 
-	info.DLState[AudioItag].File = filepath.Join(fdir, fmt.Sprintf("%s.f%d.state", info.VideoID, AudioItag))
-	info.DLState[info.Quality].File = filepath.Join(fdir, fmt.Sprintf("%s.f%d.state", info.VideoID, info.Quality))
+	if len(tempDir) > 0 && tempDir != "." {
+		err = os.MkdirAll(tempDir, info.DirMode)
+		if err != nil {
+			LogWarn("Error creating temporary directory: %s", err)
+			LogWarn("Temporary files will be placed in the current working directory")
+			tempDir = "."
+		}
+	}
+
+	info.DLState[AudioItag].File = filepath.Join(tempDir, fmt.Sprintf("%s.f%d.state", info.VideoID, AudioItag))
+	info.DLState[info.Quality].File = filepath.Join(tempDir, fmt.Sprintf("%s.f%d.state", info.VideoID, info.Quality))
 	if Exists(info.DLState[AudioItag].File) {
 		stateData, err := os.ReadFile(info.DLState[AudioItag].File)
 		if err == nil {
@@ -689,7 +727,12 @@ func run() int {
 	}
 
 	if len(tmpDir) == 0 {
-		tmpDir, err = os.MkdirTemp(fdir, fmt.Sprintf("%s__", info.VideoID))
+		if len(tempDir) == 0 {
+			tmpDir = fdir
+		} else {
+			tmpDir = tempDir
+		}
+		tmpDir, err = os.MkdirTemp(tmpDir, fmt.Sprintf("%s__", info.VideoID))
 		if err != nil {
 			LogWarn("Error creating temp directory: %s", err)
 			LogWarn("Will download data directly to %s instead", fdir)
@@ -739,7 +782,7 @@ func run() int {
 	}
 
 	if (downloadThumbnail || writeThumbnail) && len(info.Thumbnail) > 0 {
-		downloaded := DownloadThumbnail(info.Thumbnail, thmbnlFile)
+		downloaded := DownloadThumbnail(info.Thumbnail, thmbnlFile, info.FileMode)
 
 		if !downloaded {
 			TryDelete(thmbnlFile)
@@ -752,7 +795,7 @@ func run() int {
 	}
 
 	if writeDesc && len(info.Metadata["comment"]) > 0 {
-		err = os.WriteFile(descFile, []byte(info.Metadata["comment"]), 0644)
+		err = os.WriteFile(descFile, []byte(info.Metadata["comment"]), info.FileMode)
 
 		if err != nil {
 			LogWarn("Error writing description file: %s", err)
@@ -760,7 +803,7 @@ func run() int {
 		}
 	}
 
-	err = os.WriteFile(muxFile, []byte(ffmpegCmd), 0644)
+	err = os.WriteFile(muxFile, []byte(ffmpegCmd), info.FileMode)
 	if err != nil {
 		LogWarn("Failed to write initial mux file: %s", err)
 		TryDelete(muxFile)

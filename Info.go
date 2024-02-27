@@ -185,6 +185,9 @@ type DownloadInfo struct {
 
 	MDLInfo map[string]*MediaDLInfo
 	DLState map[int]*DownloadState
+
+	FileMode os.FileMode
+	DirMode  os.FileMode
 }
 
 func NewDownloadInfo() *DownloadInfo {
@@ -420,7 +423,7 @@ func (di *DownloadInfo) SaveState(itag int) {
 		return
 	}
 
-	err = os.WriteFile(di.DLState[itag].File, data, 0644)
+	err = os.WriteFile(di.DLState[itag].File, data, di.FileMode)
 	if err != nil {
 		LogWarn("Error when saving state: %s", err)
 		return
@@ -913,7 +916,7 @@ func (di *DownloadInfo) downloadFragment(state *fragThreadState, dataChan chan<-
 		}
 
 		if state.ToFile {
-			err = os.WriteFile(fname, respData, 0644)
+			err = os.WriteFile(fname, respData, di.FileMode)
 			if err != nil {
 				LogDebug("%s: Failed to write fragment %d to file: %s", state.Name, state.SeqNum, err)
 				di.PrintStatus()

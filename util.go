@@ -336,7 +336,7 @@ func DownloadData(url string) []byte {
 Download the given url to the given file name.
 Obviously meant to be used for thumbnail images.
 */
-func DownloadThumbnail(url, fname string) bool {
+func DownloadThumbnail(url, fname string, fileMode os.FileMode) bool {
 	resp, err := client.Get(url)
 	if err != nil {
 		LogWarn("Failed to download thumbnail: %v", err)
@@ -350,7 +350,7 @@ func DownloadThumbnail(url, fname string) bool {
 		return false
 	}
 
-	err = os.WriteFile(fname, data, 0644)
+	err = os.WriteFile(fname, data, fileMode)
 	if err != nil {
 		LogWarn("Failed to write thumbnail: %v", err)
 		os.Remove(fname)
