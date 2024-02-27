@@ -55,12 +55,24 @@ Options:
 	--debug
 		Print a lot of extra information.
 
+	-dp
+	--directory-permissions PERMISSIONS
+		Set the filesystem permissions for created directories. Uses unix
+		numeric notation. Be aware of umask settings for your directory.
+		Default is 0755.
+
 	--error
 		Print only errors and general information.
 
 	--ffmpeg-path FFMPEG_PATH
 		Set a specific ffmpeg location, including program name.
 		e.g. "C:\ffmpeg\ffmpeg.exe" or "/opt/ffmpeg/ffmpeg"
+
+	-fp
+	--file-permissions PERMISSIONS
+		Set the filesystem permissions for created files. Uses unix
+		numeric notation. Be aware of umask settings for your directory.
+		Default is 0644.
 
 	--h264
 		Only download h264 video, skipping VP9 if it would have been used.
@@ -186,6 +198,12 @@ Options:
 		Save the audio to a separate file, similar to when downloading
 		audio_only, alongside the final muxed file. This includes embedding
 		metadata and the thumbnail if set.
+
+	-td
+	--temporary-dir DIRECTORY
+		Set the working directory for the download. This is where the
+		temporary files will be stored. If not set, the output directory
+		will be used.
 
 	--threads THREAD_COUNT
 		Set the number of threads to use for downloading audio and video
