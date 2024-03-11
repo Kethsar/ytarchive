@@ -309,6 +309,10 @@ func (di *DownloadInfo) DownloadAndroidPlayerResponse() (*PlayerResponse, error)
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("returned non-200 status code %d", resp.StatusCode)
+	}
+
 	respData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
