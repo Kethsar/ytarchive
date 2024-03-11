@@ -24,7 +24,7 @@ const (
 	'context': {
 		'client': {
 			'clientName': 'ANDROID',
-			'clientVersion': '17.31.35',
+			'clientVersion': '19.09.37',
 			'hl': 'en'
 		}
 	},
@@ -275,7 +275,7 @@ func (di *DownloadInfo) DownloadAndroidPlayerResponse() (*PlayerResponse, error)
 	}
 
 	req.Header.Add("X-YouTube-Client-Name", "3")
-	req.Header.Add("X-YouTube-Client-Version", "17.31.35")
+	req.Header.Add("X-YouTube-Client-Version", "19.09.37")
 	req.Header.Add("Origin", "https://www.youtube.com")
 	req.Header.Add("content-type", "application/json")
 
