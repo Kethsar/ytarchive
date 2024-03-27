@@ -519,13 +519,8 @@ func (di *DownloadInfo) ParseInputUrl() error {
 			di.LiveURL = true
 			return nil
 		} else if strings.HasPrefix(lowerPath, "/live/") {
-			videoID := strings.TrimPrefix(lowerPath, "/live/")
-			videoID = strings.Trim(videoID, "/")
-
-			if len(videoID) > 0 {
-				di.VideoID = videoID
-				return nil
-			}
+			di.VideoID = strings.TrimPrefix(parsedUrl.EscapedPath(), "/live/")
+			return nil
 		}
 	} else if lowerHost == "youtu.be" {
 		di.VideoID = strings.TrimLeft(parsedUrl.EscapedPath(), "/")
