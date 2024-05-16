@@ -85,6 +85,11 @@ Options:
 	--debug
 		Print a lot of extra information.
 
+	--disable-save-state
+		Disable saving state for resumable downloads. Useful if you are
+		archiving the same stream multiple times in the same directory
+		for some reason.
+
 	-dp
 	--directory-permissions PERMISSIONS
 		Set the filesystem permissions for created directories. Uses unix
