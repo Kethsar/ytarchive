@@ -622,6 +622,11 @@ func run() int {
 		info.SetDownloadUrl(DtypeAudio, gvAudioUrl)
 	}
 
+	if monitorChannel && cliFlags.NArg() < 2 {
+		LogError("You must specify a channel AND quality when choosing to monitor a channel")
+		return 1
+	}
+
 	if len(info.URL) == 0 {
 		if cliFlags.NArg() > 1 {
 			info.URL = cliFlags.Arg(0)
