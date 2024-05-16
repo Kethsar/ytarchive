@@ -154,19 +154,20 @@ type DownloadInfo struct {
 	CookiesURL *url.URL
 	Ytcfg      *YTCFG
 
-	Stopping    bool
-	InProgress  bool
-	Live        bool
-	VP9         bool
-	H264        bool
-	Unavailable bool
-	GVideoDDL   bool
-	FragFiles   bool
-	LiveURL     bool
-	AudioOnly   bool
-	VideoOnly   bool
-	MembersOnly bool
-	InfoPrinted bool
+	Stopping         bool
+	InProgress       bool
+	Live             bool
+	VP9              bool
+	H264             bool
+	Unavailable      bool
+	GVideoDDL        bool
+	FragFiles        bool
+	LiveURL          bool
+	AudioOnly        bool
+	VideoOnly        bool
+	MembersOnly      bool
+	InfoPrinted      bool
+	DisableSaveState bool
 
 	Thumbnail       string
 	VideoID         string
@@ -413,7 +414,7 @@ func (di *DownloadInfo) PrintStatus() {
 }
 
 func (di *DownloadInfo) SaveState(itag int) {
-	if len(di.DLState[itag].File) == 0 {
+	if di.DisableSaveState || len(di.DLState[itag].File) == 0 {
 		return
 	}
 

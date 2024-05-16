@@ -409,6 +409,7 @@ var (
 	vp9               bool
 	h264              bool
 	membersOnly       bool
+	disableSaveState  bool
 
 	cancelled = false
 )
@@ -461,6 +462,7 @@ func init() {
 	cliFlags.BoolVar(&separateAudio, "separate-audio", false, "Save a copy of the audio separately along with the muxed file.")
 	cliFlags.BoolVar(&monitorChannel, "monitor-channel", false, "Continually monitor a channel for streams.")
 	cliFlags.BoolVar(&membersOnly, "members-only", false, "Only download members-only streams when waiting on a channel URL such as /live.")
+	cliFlags.BoolVar(&disableSaveState, "disable-save-state", false, "Disable resumable download state.")
 	cliFlags.StringVar(&cookieFile, "c", "", "Cookies to be used when downloading.")
 	cliFlags.StringVar(&cookieFile, "cookies", "", "Cookies to be used when downloading.")
 	cliFlags.StringVar(&fnameFormat, "o", DefaultFilenameFormat, "Filename output format.")
@@ -546,6 +548,7 @@ func run() int {
 	info.MembersOnly = membersOnly
 	info.FileMode = os.FileMode(filePerms)
 	info.DirMode = os.FileMode(dirPerms)
+	info.DisableSaveState = disableSaveState
 
 	if doWait {
 		info.Wait = ActionDo
@@ -565,10 +568,10 @@ func run() int {
 		saveFilesOnCancel = ActionDoNot
 	}
 
-	if doSaveState {
-		saveStateOnCancel = ActionDo
-	} else if noSaveState {
+	if noSaveState || disableSaveState {
 		saveStateOnCancel = ActionDoNot
+	} else if doSaveState {
+		saveStateOnCancel = ActionDo
 	}
 
 	if audioOnly {
@@ -705,24 +708,26 @@ func run() int {
 		}
 	}
 
-	info.DLState[AudioItag].File = filepath.Join(tempDir, fmt.Sprintf("%s.f%d.state", info.VideoID, AudioItag))
-	info.DLState[info.Quality].File = filepath.Join(tempDir, fmt.Sprintf("%s.f%d.state", info.VideoID, info.Quality))
-	if Exists(info.DLState[AudioItag].File) {
-		stateData, err := os.ReadFile(info.DLState[AudioItag].File)
-		if err == nil {
-			err = json.Unmarshal(stateData, info.DLState[AudioItag])
+	if !disableSaveState {
+		info.DLState[AudioItag].File = filepath.Join(tempDir, fmt.Sprintf("%s.f%d.state", info.VideoID, AudioItag))
+		info.DLState[info.Quality].File = filepath.Join(tempDir, fmt.Sprintf("%s.f%d.state", info.VideoID, info.Quality))
+		if Exists(info.DLState[AudioItag].File) {
+			stateData, err := os.ReadFile(info.DLState[AudioItag].File)
+			if err == nil {
+				err = json.Unmarshal(stateData, info.DLState[AudioItag])
+			}
+			if err == nil {
+				tmpDir = info.DLState[AudioItag].TempDir
+			}
 		}
-		if err == nil {
-			tmpDir = info.DLState[AudioItag].TempDir
-		}
-	}
-	if Exists(info.DLState[info.Quality].File) {
-		stateData, err := os.ReadFile(info.DLState[info.Quality].File)
-		if err == nil {
-			err = json.Unmarshal(stateData, info.DLState[info.Quality])
-		}
-		if err == nil && len(tmpDir) == 0 {
-			tmpDir = info.DLState[AudioItag].TempDir
+		if Exists(info.DLState[info.Quality].File) {
+			stateData, err := os.ReadFile(info.DLState[info.Quality].File)
+			if err == nil {
+				err = json.Unmarshal(stateData, info.DLState[info.Quality])
+			}
+			if err == nil && len(tmpDir) == 0 {
+				tmpDir = info.DLState[AudioItag].TempDir
+			}
 		}
 	}
 
@@ -739,8 +744,10 @@ func run() int {
 			tmpDir = fdir
 		}
 
-		for _, state := range info.DLState {
-			state.TempDir = tmpDir
+		if !disableSaveState {
+			for _, state := range info.DLState {
+				state.TempDir = tmpDir
+			}
 		}
 	}
 
@@ -936,16 +943,20 @@ func run() int {
 						os.RemoveAll(tmpDir)
 					}
 
-					for _, state := range info.DLState {
-						TryDelete(state.File)
+					if !disableSaveState {
+						for _, state := range info.DLState {
+							TryDelete(state.File)
+						}
 					}
 				} else if !saveState {
 					if tmpDir != fdir {
 						os.RemoveAll(tmpDir)
 					}
 
-					for _, state := range info.DLState {
-						TryDelete(state.File)
+					if !disableSaveState {
+						for _, state := range info.DLState {
+							TryDelete(state.File)
+						}
 					}
 				}
 
@@ -961,8 +972,10 @@ func run() int {
 	}
 
 	signal.Reset(os.Interrupt)
-	for _, state := range info.DLState {
-		TryDelete(state.File)
+	if !disableSaveState {
+		for _, state := range info.DLState {
+			TryDelete(state.File)
+		}
 	}
 	if loglevel > LoglevelQuiet {
 		fmt.Fprintln(os.Stderr)

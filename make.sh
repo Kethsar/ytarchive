@@ -1,5 +1,7 @@
 #!/bin/bash
-if [[ -n "$1" ]]; then
+if [[ "$1" = "t" ]]; then
+    go build -race -ldflags "-X main.Commit=-$(git rev-parse --short HEAD)"
+elif [[ -n "$1" ]]; then
     CGO_ENABLED=0 go build -ldflags "-X main.Commit=-$(git rev-parse --short HEAD)"
     GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Commit=-$(git rev-parse --short HEAD)"
 else
