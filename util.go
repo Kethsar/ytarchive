@@ -692,8 +692,8 @@ func HandleFragDownloadError(di *DownloadInfo, state *fragThreadState, err error
 	}
 }
 
-func TryMove(srcFile, dstFile string) error {
-	_, err := os.Stat(srcFile)
+func TryMove(srcFileName, dstFileName string) error {
+	_, err := os.Stat(srcFileName)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			LogWarn("Error moving file: %s", err)
@@ -703,11 +703,38 @@ func TryMove(srcFile, dstFile string) error {
 		return nil
 	}
 
-	LogInfo("Moving file %s to %s", srcFile, dstFile)
+	LogInfo("Moving file %s to %s", srcFileName, dstFileName)
 
-	err = os.Rename(srcFile, dstFile)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		LogWarn("Error moving file: %s", err)
+	err = os.Rename(srcFileName, dstFileName)
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+
+	// Rename failed, manually copy the file
+	LogWarn("Error moving file: %s", err)
+	LogWarn("Attempting to copy file instead")
+
+	srcFile, err := os.Open(srcFileName)
+	if err != nil {
+		LogWarn("Error copying file: %s", err)
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dstFileName)
+	if err != nil {
+		LogWarn("Error copying file: %s", err)
+		return err
+	}
+	defer dstFile.Close()
+
+	if _, err = io.Copy(dstFile, srcFile); err != nil {
+		LogWarn("Error copying file: %s", err)
+		return err
+	}
+
+	if err = os.Remove(srcFileName); err != nil {
+		LogWarn("Error removing file after copying: %s", err)
 		return err
 	}
 
