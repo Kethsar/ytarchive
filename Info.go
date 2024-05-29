@@ -522,6 +522,9 @@ func (di *DownloadInfo) ParseInputUrl() error {
 		} else if strings.HasPrefix(lowerPath, "/live/") {
 			di.VideoID = strings.TrimPrefix(parsedUrl.EscapedPath(), "/live/")
 			return nil
+		} else if strings.HasPrefix(lowerPath, "/shorts/") {
+			di.VideoID = strings.TrimPrefix(parsedUrl.EscapedPath(), "/shorts/")
+			return nil
 		}
 	} else if lowerHost == "youtu.be" {
 		di.VideoID = strings.TrimLeft(parsedUrl.EscapedPath(), "/")
