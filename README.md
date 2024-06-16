@@ -268,6 +268,9 @@ Options:
 	--write-thumbnail
 		Write the thumbnail to a separate file.
 
+	--live-from-now
+		Starts downloading from the current timestamp (now) instead of from the beginning of the stream.
+
 Examples:
 	ytarchive -w
 		Waits for a stream. Will prompt for a URL and quality.

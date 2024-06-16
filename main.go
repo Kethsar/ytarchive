@@ -298,6 +298,9 @@ Options:
 	--write-thumbnail
 		Write the thumbnail to a separate file.
 
+	--live-from-now
+		Starts downloading from the current timestamp (now) instead of from the beginning of the stream.
+
 Examples:
 	%[1]s -w
 		Waits for a stream. Will prompt for a URL and quality.
@@ -415,6 +418,7 @@ var (
 	h264              bool
 	membersOnly       bool
 	disableSaveState  bool
+	liveFromNow       bool
 
 	cancelled = false
 )
@@ -483,6 +487,7 @@ func init() {
 	cliFlags.UintVar(&dirPerms, "directory-permissions", 0755, "Filesystem permissions for the created directories.")
 	cliFlags.UintVar(&filePerms, "fp", 0644, "Filesystem permissions for the created files.")
 	cliFlags.UintVar(&filePerms, "file-permissions", 0644, "Filesystem permissions for the created files.")
+	cliFlags.BoolVar(&liveFromNow, "live-from-now", false, "Starts downloading from the current timestamp instead of from the beginning (does not affect resuming).")
 
 	cliFlags.Func("video-url", "Googlevideo URL for the video stream.", func(s string) error {
 		var itag int
@@ -554,6 +559,7 @@ func run() int {
 	info.FileMode = os.FileMode(filePerms)
 	info.DirMode = os.FileMode(dirPerms)
 	info.DisableSaveState = disableSaveState
+	info.LiveFromNow = liveFromNow
 
 	if doWait {
 		info.Wait = ActionDo

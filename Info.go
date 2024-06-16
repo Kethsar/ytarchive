@@ -168,6 +168,7 @@ type DownloadInfo struct {
 	MembersOnly      bool
 	InfoPrinted      bool
 	DisableSaveState bool
+	LiveFromNow      bool
 
 	Thumbnail       string
 	VideoID         string
@@ -1027,18 +1028,27 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 		f, err = os.Create(dataFile)
 	}
 
+	curFrag = 0
 	if di.LastSq >= 0 {
 		curFrag = di.LastSq - (LiveMaximumSeekable / (di.TargetDuration))
 		maxSeqs = di.LastSq
 	}
 
-	if curFrag < di.DLState[itag].Fragments {
-		curFrag = di.DLState[itag].Fragments
-	} else if curFrag > 0 {
-		LogWarn("%s: YT only retains the livestream 5 days past for seeking, starting from sequence %d (latest is %d)", dataType, curFrag, di.LastSq)
-		startFrag = curFrag
+	if di.LiveFromNow && di.DLState[itag].Fragments == 0 {
+		LogWarn("[--live-from-now] %s: Starting from latest sequence no. %d", dataType, di.LastSq)
+		startFrag = di.LastSq
+		curFrag = startFrag
+
+		di.DLState[itag].Fragments = startFrag
 	} else {
-		curFrag = 0
+		if curFrag < di.DLState[itag].Fragments {
+			curFrag = di.DLState[itag].Fragments
+		} else if curFrag > 0 {
+			LogWarn("%s: YT only retains the livestream 5 days past for seeking, starting from sequence %d (latest is %d)", dataType, curFrag, di.LastSq)
+			startFrag = curFrag
+		} else {
+			curFrag = 0
+		}
 	}
 	curSeq := curFrag
 
