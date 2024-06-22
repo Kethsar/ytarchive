@@ -270,6 +270,11 @@ Options:
 
 	--live-from-now
 		Starts downloading from the current timestamp (now) instead of from the beginning of the stream.
+		(Does not affect resuming).
+		
+	--live-from [DURATION | NOW]
+		Starts downloading from a stream time in the past. Example: '1h10m' ago.
+		(Supports Days (d), Hours (h), Minutes (m) and Seconds (s)).
 
 Examples:
 	ytarchive -w

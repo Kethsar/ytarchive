@@ -300,6 +300,10 @@ Options:
 
 	--live-from-now
 		Starts downloading from the current timestamp (now) instead of from the beginning of the stream.
+	
+	--live-from [DURATION | NOW]
+		Starts downloading from a stream time in the past. Example: '1h10m' ago.
+		(Supports Days (d), Hours (h), Minutes (m) and Seconds (s)).
 
 Examples:
 	%[1]s -w
@@ -419,6 +423,7 @@ var (
 	membersOnly       bool
 	disableSaveState  bool
 	liveFromNow       bool
+	liveFromStr       string
 
 	cancelled = false
 )
@@ -488,6 +493,7 @@ func init() {
 	cliFlags.UintVar(&filePerms, "fp", 0644, "Filesystem permissions for the created files.")
 	cliFlags.UintVar(&filePerms, "file-permissions", 0644, "Filesystem permissions for the created files.")
 	cliFlags.BoolVar(&liveFromNow, "live-from-now", false, "Starts downloading from the current timestamp instead of from the beginning (does not affect resuming).")
+	cliFlags.StringVar(&liveFromStr, "live-from", "", "Starts downloading from a stream time in the past (e.g. '1h10m15s' ago) (does not affect resuming).")
 
 	cliFlags.Func("video-url", "Googlevideo URL for the video stream.", func(s string) error {
 		var itag int
@@ -664,6 +670,19 @@ func run() int {
 
 	if !info.GVideoDDL && !info.GetVideoInfo() {
 		return 1
+	}
+
+	if liveFromNow && liveFromStr != "" {
+		LogError("You cannot use '--live-from-now' and '--live-from' at the same time!")
+		return 1
+	}
+
+	if liveFromStr != "" {
+		err = info.ParseLiveFromStrVal(liveFromStr)
+		if err != nil {
+			LogError(err.Error())
+			return 1
+		}
 	}
 
 	info.DLState[AudioItag] = &DownloadState{}

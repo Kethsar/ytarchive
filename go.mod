@@ -9,4 +9,7 @@ require (
 	golang.org/x/sys v0.3.0
 )
 
-require github.com/mattn/go-isatty v0.0.14 // indirect
+require (
+	github.com/mattn/go-isatty v0.0.14 // indirect
+	github.com/xhit/go-str2duration/v2 v2.1.0
+)

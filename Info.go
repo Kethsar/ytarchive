@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/xhit/go-str2duration/v2"
 )
 
 const (
@@ -169,6 +172,8 @@ type DownloadInfo struct {
 	InfoPrinted      bool
 	DisableSaveState bool
 	LiveFromNow      bool
+	LiveFromVal      string
+	LiveFromSqJump   int
 
 	Thumbnail       string
 	VideoID         string
@@ -482,6 +487,47 @@ func (di *DownloadInfo) GetGvideoUrl(dataType string) {
 	}
 }
 
+func (di *DownloadInfo) ParseLiveFromStrVal(liveFromStr string) error {
+	if liveFromStr == "" {
+		return nil
+	}
+
+	if strings.ToLower(liveFromStr) == "now" {
+		di.LiveFromNow = true
+		return nil
+	}
+
+	duration, err := str2duration.ParseDuration(liveFromStr)
+	if err != nil {
+		errStr := fmt.Errorf("unable to parse duration specified in '--live-from': %v", err)
+		return errors.New(errStr.Error())
+	}
+
+	secondsTotal := duration.Seconds()
+	fragDur := float64(di.TargetDuration)
+	secondsRoundedToFragLength := int(math.Ceil(secondsTotal/fragDur) * fragDur) // Rounds up to next frag interval time
+	noOfFragsToJump := secondsRoundedToFragLength / di.TargetDuration
+
+	// Invalid time specification (too short or too long)
+	if secondsTotal < 0 || secondsTotal > LiveMaximumSeekable {
+		errStr := fmt.Errorf("invalid duration specified in '--live-from': maximum video seek time is %d days", (LiveMaximumSeekable / 60 / 60 / 24))
+		return errors.New(errStr.Error())
+	}
+	// If the stream hasn't been live long enough
+	if noOfFragsToJump > di.LastSq {
+		streamLength := di.LastSq * di.TargetDuration
+		curStreamDuration := time.Duration(streamLength * 1e9)
+
+		errStr := fmt.Errorf("invalid duration specified in '--live-from': the stream has not been live for that long (live for %s)", curStreamDuration)
+		return errors.New(errStr.Error())
+	}
+
+	di.LiveFromVal = liveFromStr
+	di.LiveFromSqJump = noOfFragsToJump
+	LogInfo("Time to jump %d (%d frags) [last sq is %d]", secondsRoundedToFragLength, noOfFragsToJump, di.LastSq) // TODO: remove
+	return nil
+}
+
 func (di *DownloadInfo) ParseInputUrl() error {
 	parsedUrl, err := url.Parse(di.URL)
 	if err != nil {
@@ -594,6 +640,7 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 		if len(androidPR.StreamingData.DashManifestURL) > 0 {
 			LogDebug("Retrieving URLs from Android DASH manifest")
 			manifest := DownloadData(androidPR.StreamingData.DashManifestURL)
+
 			if len(manifest) > 0 {
 				// we store the LastSq to calculate 5 days past
 				urls, di.LastSq = GetUrlsFromManifest(manifest)
@@ -623,6 +670,7 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 	if len(pr.StreamingData.DashManifestURL) > 0 {
 		LogDebug("Retrieving URLs from web DASH manifest")
 		manifest := DownloadData(pr.StreamingData.DashManifestURL)
+
 		if len(manifest) > 0 {
 			// we store the LastSq to calculate 5 days past
 			dashUrls, lastSq := GetUrlsFromManifest(manifest)
@@ -1011,6 +1059,12 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 	}
 
 	if di.DLState[itag].Fragments > 0 {
+		if di.LiveFromNow {
+			LogWarn("%s: '--live-from-now' is being ignored as download is being resumed.", dataType)
+		} else if di.LiveFromVal != "" {
+			LogWarn("%s: '--live-from' value %s is being ignored as download is being resumed.", dataType, liveFromStr)
+		}
+
 		f, err = os.OpenFile(dataFile, os.O_RDWR, 0666)
 		if err != nil {
 			LogWarn("%s: Failed to open %s to resume download: %s", dataType, dataFile, err)
@@ -1035,11 +1089,17 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 	}
 
 	if di.LiveFromNow && di.DLState[itag].Fragments == 0 {
-		LogWarn("[--live-from-now] %s: Starting from latest sequence no. %d", dataType, di.LastSq)
 		startFrag = di.LastSq
 		curFrag = startFrag
 
 		di.DLState[itag].Fragments = startFrag
+		LogWarn("[--live-from-now] %s: Starting from latest sequence no. %d", dataType, di.LastSq)
+	} else if di.LiveFromVal != "" && di.DLState[itag].Fragments == 0 {
+		startFrag = di.LastSq - di.LiveFromSqJump
+		curFrag = startFrag
+
+		di.DLState[itag].Fragments = startFrag
+		LogWarn("[--live-from] %s: Starting from time -%s (seq no. %d)", dataType, di.LiveFromVal, startFrag)
 	} else {
 		if curFrag < di.DLState[itag].Fragments {
 			curFrag = di.DLState[itag].Fragments
