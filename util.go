@@ -1031,7 +1031,7 @@ func GetFFmpegArgs(audioFile, videoFile, thumbnail, fileDir, fileName string, on
 		}
 	}
 
-	ffmpegArgs = append(ffmpegArgs, mergeFile)
+	ffmpegArgs = append(ffmpegArgs, "-fflags", "bitexact", mergeFile)
 
 	return FFMpegArgs{
 		Args:     ffmpegArgs,
