@@ -268,6 +268,16 @@ Options:
 	--write-thumbnail
 		Write the thumbnail to a separate file.
 
+	--live-from [DURATION] or [NOW]
+		Starts the download from the specified time duration string.
+		Can be a negative or positive duration or 'now'.
+		Supports Days (d), Hours (h), Minutes (m) and Seconds (s).
+		Examples: * '--live-from -1h10m' will seek backwards 1 hour and 10 minutes and then 
+		            start downloading from that time.
+		          * '--live-from 45m30s' will wait 45 minutes and 30 seconds from now and then
+		            start downloading.
+		          * '--live-from now' will start recording from the current stream timestamp.
+
 Examples:
 	ytarchive -w
 		Waits for a stream. Will prompt for a URL and quality.
