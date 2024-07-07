@@ -267,6 +267,10 @@ Options:
 
 	--write-thumbnail
 		Write the thumbnail to a separate file.
+	
+	--duration [DURATION]
+		Downloads the livestream for the specified duration and then exits.
+		Duration string: supports Days (d), Hours (h), Minutes (m) and Seconds (s).
 
 Examples:
 	ytarchive -w

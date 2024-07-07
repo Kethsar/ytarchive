@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/xhit/go-str2duration/v2"
 )
 
 const (
@@ -174,6 +177,8 @@ type DownloadInfo struct {
 	URL             string
 	SelectedQuality string
 	Status          string
+	DurationVal     string
+	DurationEndSq   int
 
 	FragMaxTries   uint
 	Wait           int
@@ -658,6 +663,26 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 	return urls
 }
 
+func (di *DownloadInfo) ParseDurationStrVal() error {
+	if di.DurationVal == "" {
+		return nil
+	}
+
+	duration, err := str2duration.ParseDuration(di.DurationVal)
+	if err != nil {
+		errStr := fmt.Errorf("unable to parse duration string: %v", err)
+		return errors.New(errStr.Error())
+	}
+
+	secondsTotal := duration.Seconds()
+	fragDur := float64(di.TargetDuration)
+	secondsRoundedToFragLength := int(math.Ceil(secondsTotal/fragDur) * fragDur) // Rounds up to next frag interval time
+	noOfFragsToDownload := secondsRoundedToFragLength / di.TargetDuration
+
+	di.DurationEndSq = noOfFragsToDownload
+	return nil
+}
+
 // Get necessary video info such as video/audio URLs
 func (di *DownloadInfo) GetVideoInfo() bool {
 	di.Lock()
@@ -962,9 +987,23 @@ func (di *DownloadInfo) DownloadFrags(dataType string, seqChan <-chan *seqChanIn
 		time.Duration(di.TargetDuration)*time.Second,
 	)
 
+	var endFrag int // End fragment number to stop on for the --duration option.
 	for seqInfo := range seqChan {
 		if di.IsStopping() || di.IsFinished(dataType) {
 			break
+		}
+
+		// --duration: Stop if reaching the maximum durationSq.
+		if di.DurationEndSq != 0 {
+			if endFrag == 0 {
+				endFrag = seqInfo.CurSequence + di.DurationEndSq
+			} else {
+				if seqInfo.CurSequence >= endFrag {
+					LogDebug("%s: Reached the maximum duration specified by the --duration option.", name)
+					di.SetFinished(dataType)
+					break
+				}
+			}
 		}
 
 		if seqInfo.MaxSequence > -1 && !di.IsLive() && seqInfo.CurSequence >= seqInfo.MaxSequence {

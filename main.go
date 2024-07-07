@@ -297,7 +297,11 @@ Options:
 
 	--write-thumbnail
 		Write the thumbnail to a separate file.
-
+	
+	--duration [DURATION]
+		Downloads the livestream for the specified duration and then exits.
+		Duration string: supports Days (d), Hours (h), Minutes (m) and Seconds (s).
+	
 Examples:
 	%[1]s -w
 		Waits for a stream. Will prompt for a URL and quality.
@@ -415,6 +419,7 @@ var (
 	h264              bool
 	membersOnly       bool
 	disableSaveState  bool
+	durationStr       string
 
 	cancelled = false
 )
@@ -483,6 +488,7 @@ func init() {
 	cliFlags.UintVar(&dirPerms, "directory-permissions", 0755, "Filesystem permissions for the created directories.")
 	cliFlags.UintVar(&filePerms, "fp", 0644, "Filesystem permissions for the created files.")
 	cliFlags.UintVar(&filePerms, "file-permissions", 0644, "Filesystem permissions for the created files.")
+	cliFlags.StringVar(&durationStr, "duration", "", "Duration of the stream to capture before stopping.")
 
 	cliFlags.Func("video-url", "Googlevideo URL for the video stream.", func(s string) error {
 		var itag int
@@ -554,6 +560,7 @@ func run() int {
 	info.FileMode = os.FileMode(filePerms)
 	info.DirMode = os.FileMode(dirPerms)
 	info.DisableSaveState = disableSaveState
+	info.DurationVal = durationStr
 
 	if doWait {
 		info.Wait = ActionDo
@@ -658,6 +665,14 @@ func run() int {
 
 	if !info.GVideoDDL && !info.GetVideoInfo() {
 		return 1
+	}
+
+	if info.DurationVal != "" {
+		err = info.ParseDurationStrVal()
+		if err != nil {
+			LogError("--duration: " + err.Error())
+			return 1
+		}
 	}
 
 	info.DLState[AudioItag] = &DownloadState{}
