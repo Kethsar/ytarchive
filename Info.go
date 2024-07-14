@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +14,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dannav/hhmmss"
+	"github.com/xhit/go-str2duration/v2"
 )
 
 const (
@@ -138,6 +142,7 @@ type MediaDLInfo struct {
 State for resumable downloading
 */
 type DownloadState struct {
+	StartFrag int
 	Fragments int
 	Size      int64
 	TempDir   string
@@ -168,6 +173,8 @@ type DownloadInfo struct {
 	MembersOnly      bool
 	InfoPrinted      bool
 	DisableSaveState bool
+	LiveFromVal      string
+	LiveFromSq       int
 
 	Thumbnail       string
 	VideoID         string
@@ -479,6 +486,74 @@ func (di *DownloadInfo) GetGvideoUrl(dataType string) {
 			LogGeneral("URL given does not appear to be appropriate for the data type needed.")
 		}
 	}
+}
+
+func (di *DownloadInfo) ParseLiveFromStrVal() error {
+	if di.LiveFromVal == "" {
+		return nil
+	}
+
+	if strings.ToLower(di.LiveFromVal) == "now" {
+		// --live-from now
+		//  Seek to current sequence number
+		di.LiveFromSq = di.LastSq
+	} else {
+		durationVal := strings.TrimPrefix(di.LiveFromVal, "-") // Removes negative symbol from start of duration string
+
+		// Try to parse the value as a duration string
+		duration, err := str2duration.ParseDuration(durationVal)
+		if err != nil {
+			// Try to parse the value as a HH:MM:SS string
+			duration, err = hhmmss.Parse(durationVal)
+			if err != nil {
+				errStr := fmt.Errorf("unable to parse value as either a duration or a time: %v", err)
+				return errors.New(errStr.Error())
+			}
+		}
+
+		secondsTotal := duration.Seconds()
+		fragDur := float64(di.TargetDuration)
+		secondsRoundedToFragLength := int(math.Ceil(secondsTotal/fragDur) * fragDur) // Rounds up to next frag interval time
+		noOfFragsToJump := secondsRoundedToFragLength / di.TargetDuration
+
+		if strings.HasPrefix(di.LiveFromVal, "-") {
+			// --live-from negative value
+			//  Seek to a sequence number in the past
+
+			// Invalid time specification (too short or too long)
+			if secondsTotal < 0 || secondsTotal > LiveMaximumSeekable {
+				errStr := fmt.Errorf("invalid duration specified %s. (maximum video seek time is %d days)", di.LiveFromVal, (LiveMaximumSeekable / 60 / 60 / 24))
+				return errors.New(errStr.Error())
+			}
+			// If the stream hasn't been live long enough for the specified duration
+			if noOfFragsToJump > di.LastSq {
+				streamLength := di.LastSq * di.TargetDuration
+				curStreamDuration := time.Duration(streamLength * 1e9)
+
+				errStr := fmt.Errorf("invalid duration specified. the stream has not been live for that long (live for %s)", curStreamDuration)
+				return errors.New(errStr.Error())
+			}
+
+			di.LiveFromSq = di.LastSq - noOfFragsToJump
+			LogInfo("--live-from: Jumping back %d seconds (-%d frags). Will start from sequence %d [current sq right now is %d]", secondsRoundedToFragLength, noOfFragsToJump, di.LiveFromSq, di.LastSq)
+		} else {
+			// --live-from positive value
+			//  Waits a specified timeframe and begins from a calculated future sequence number
+			if secondsTotal < 0 {
+				errStr := fmt.Errorf("invalid duration specified %s. (maximum video seek time is %d days)", di.LiveFromVal, (LiveMaximumSeekable / 60 / 60 / 24))
+				return errors.New(errStr.Error())
+			}
+
+			di.LiveFromSq = di.LastSq + noOfFragsToJump
+			LogGeneral("--live-from: Waiting %s (%d seconds) before starting...", di.LiveFromVal, secondsRoundedToFragLength)
+			LogInfo("--live-from: Waiting %s (%d seconds) before starting. Will start from sequence %d [current sq right now is %d]", di.LiveFromVal, secondsRoundedToFragLength, di.LiveFromSq, di.LastSq)
+
+			time.Sleep(time.Duration(secondsRoundedToFragLength+di.TargetDuration) * time.Second) // Waits for the specified length of time +1 frag interval (2 or 5 seconds etc).
+			info.GetVideoInfo()                                                                   // And now that the duration has elapsed, re-grab the video information (to update the latest sq).
+		}
+	}
+
+	return nil
 }
 
 func (di *DownloadInfo) ParseInputUrl() error {
@@ -1009,7 +1084,12 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 		itag = di.Quality
 	}
 
+	var resumedState bool = false
 	if di.DLState[itag].Fragments > 0 {
+		if di.LiveFromSq != 0 {
+			LogWarn("%s: Option --live-from is being ignored as download is being resumed.", dataType)
+		}
+
 		f, err = os.OpenFile(dataFile, os.O_RDWR, 0666)
 		if err != nil {
 			LogWarn("%s: Failed to open %s to resume download: %s", dataType, dataFile, err)
@@ -1021,24 +1101,40 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 				LogWarn("%s: Failed to seek %s to resume download: %s", dataType, dataFile, err)
 				LogWarn("%s: Will truncate and start from the beginning", dataType)
 				f, err = os.Create(dataFile)
+			} else {
+				resumedState = true
 			}
 		}
 	} else {
 		f, err = os.Create(dataFile)
 	}
 
-	if di.LastSq >= 0 {
-		curFrag = di.LastSq - (LiveMaximumSeekable / (di.TargetDuration))
+	if resumedState {
+		// Resumed state: Set the startFrag and curFrag values from the state file.
+		startFrag = di.DLState[itag].StartFrag
+		curFrag = startFrag + di.DLState[itag].Fragments
 		maxSeqs = di.LastSq
-	}
-
-	if curFrag < di.DLState[itag].Fragments {
-		curFrag = di.DLState[itag].Fragments
-	} else if curFrag > 0 {
-		LogWarn("%s: YT only retains the livestream 5 days past for seeking, starting from sequence %d (latest is %d)", dataType, curFrag, di.LastSq)
-		startFrag = curFrag
 	} else {
-		curFrag = 0
+		if di.LastSq >= 0 {
+			curFrag = di.LastSq - (LiveMaximumSeekable / (di.TargetDuration))
+			maxSeqs = di.LastSq
+		}
+
+		if di.LiveFromSq != 0 {
+			// --live-from: Set start sequence.
+			curFrag = di.LiveFromSq
+			startFrag = curFrag
+			LogWarn("[--live-from] %s: Starting from sequence %d (latest is %d)", dataType, startFrag, di.LastSq)
+		} else if curFrag > 0 {
+			// Stream that has been live for more than 5 days.
+			LogWarn("%s: YT only retains the livestream 5 days past for seeking, starting from sequence %d (latest is %d)", dataType, curFrag, di.LastSq)
+			startFrag = curFrag
+		} else {
+			// All other stream lengths.
+			curFrag = 0
+		}
+
+		di.DLState[itag].StartFrag = startFrag // Sets start frag in state file for resuming.
 	}
 	curSeq := curFrag
 
