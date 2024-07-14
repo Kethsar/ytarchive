@@ -672,6 +672,8 @@ func run() int {
 		if err != nil {
 			LogError("--duration: " + err.Error())
 			return 1
+		} else {
+			LogGeneral("--duration: Getting %s of content then exiting.", info.DurationVal)
 		}
 	}
 
