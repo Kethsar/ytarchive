@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dannav/hhmmss"
 	"github.com/xhit/go-str2duration/v2"
 )
 
@@ -499,10 +500,15 @@ func (di *DownloadInfo) ParseLiveFromStrVal() error {
 	} else {
 		durationVal := strings.TrimPrefix(di.LiveFromVal, "-") // Removes negative symbol from start of duration string
 
+		// Try to parse the value as a duration string
 		duration, err := str2duration.ParseDuration(durationVal)
 		if err != nil {
-			errStr := fmt.Errorf("unable to parse duration string: %v", err)
-			return errors.New(errStr.Error())
+			// Try to parse the value as a HH:MM:SS string
+			duration, err = hhmmss.Parse(durationVal)
+			if err != nil {
+				errStr := fmt.Errorf("unable to parse value as either a duration or a time: %v", err)
+				return errors.New(errStr.Error())
+			}
 		}
 
 		secondsTotal := duration.Seconds()
