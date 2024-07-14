@@ -298,9 +298,9 @@ Options:
 	--write-thumbnail
 		Write the thumbnail to a separate file.
 	
-	--duration [DURATION]
-		Downloads the livestream for the specified duration and then exits.
-		Duration string: supports Days (d), Hours (h), Minutes (m) and Seconds (s).
+	--duration [DURATION | TIMESTR]
+		Downloads the livestream for the specified length of time and then exits.
+		Supports time durations (e.g. 1d12h30m5s) or time strings (e.g. 12:30:05).
 	
 Examples:
 	%[1]s -w
