@@ -497,6 +497,7 @@ func (di *DownloadInfo) ParseLiveFromStrVal() error {
 		// --live-from now
 		//  Seek to current sequence number
 		di.LiveFromSq = di.LastSq
+		LogGeneral("--live-from: Starting from now...")
 	} else {
 		durationVal := strings.TrimPrefix(di.LiveFromVal, "-") // Removes negative symbol from start of duration string
 
@@ -506,8 +507,8 @@ func (di *DownloadInfo) ParseLiveFromStrVal() error {
 			// Try to parse the value as a HH:MM:SS string
 			duration, err = hhmmss.Parse(durationVal)
 			if err != nil {
-				errStr := fmt.Errorf("unable to parse value as either a duration or a time: %v", err)
-				return errors.New(errStr.Error())
+				LogError("--live-from: Unable to parse value as either a duration or a time string: %v", err)
+				return err
 			}
 		}
 
@@ -522,34 +523,52 @@ func (di *DownloadInfo) ParseLiveFromStrVal() error {
 
 			// Invalid time specification (too short or too long)
 			if secondsTotal < 0 || secondsTotal > LiveMaximumSeekable {
-				errStr := fmt.Errorf("invalid duration specified %s. (maximum video seek time is %d days)", di.LiveFromVal, (LiveMaximumSeekable / 60 / 60 / 24))
-				return errors.New(errStr.Error())
+				LogError("--live-from: Invalid duration specified '%s'. (Maximum video seek time is %d days)", di.LiveFromVal, (LiveMaximumSeekable / 60 / 60 / 24))
+				return errors.New("invalid duration specified")
 			}
 			// If the stream hasn't been live long enough for the specified duration
 			if noOfFragsToJump > di.LastSq {
 				streamLength := di.LastSq * di.TargetDuration
-				curStreamDuration := time.Duration(streamLength * 1e9)
+				curStreamDuration := SecondsToDurationAndTimeStr(streamLength)
 
-				errStr := fmt.Errorf("invalid duration specified. the stream has not been live for that long (live for %s)", curStreamDuration)
-				return errors.New(errStr.Error())
+				LogError("--live-from: Invalid duration specified. The stream has not been live for that long [Live for %s].", curStreamDuration)
+				return errors.New("invalid duration specified")
 			}
 
 			di.LiveFromSq = di.LastSq - noOfFragsToJump
-			LogInfo("--live-from: Jumping back %d seconds (-%d frags). Will start from sequence %d [current sq right now is %d]", secondsRoundedToFragLength, noOfFragsToJump, di.LiveFromSq, di.LastSq)
+			LogGeneral("--live-from: Jumping back %d seconds from now, and starting to download from that time.", secondsRoundedToFragLength)
+			LogDebug("Jumping back -%d frags. Will start from sequence %d [current sq right now is %d].", noOfFragsToJump, di.LiveFromSq, di.LastSq)
 		} else {
 			// --live-from positive value
-			//  Waits a specified timeframe and begins from a calculated future sequence number
-			if secondsTotal < 0 {
-				errStr := fmt.Errorf("invalid duration specified %s. (maximum video seek time is %d days)", di.LiveFromVal, (LiveMaximumSeekable / 60 / 60 / 24))
+			// Calculate the sequence number of the specified stream time to start from.
+			maxSq := di.LastSq
+			targetStartFrag := noOfFragsToJump
+
+			// Stream hasn't been live long enough
+			if di.LastSq < targetStartFrag {
+				streamLength := di.LastSq * di.TargetDuration
+				curStreamDuration := SecondsToDurationAndTimeStr(streamLength)
+
+				errStr := fmt.Errorf("invalid duration specified. the stream has not been live for that long [live for %s]", curStreamDuration)
 				return errors.New(errStr.Error())
+			} else {
+				// Make sure the Start Frag is within the 5 day limit.
+				if targetStartFrag < (di.LastSq - LiveMaximumSeekable) {
+					LogError("YT only retains the livestream 5 days past for seeking, your --live-from value of '%s' is not valid.", di.LiveFromVal)
+
+					// Calculate how long the stream has been live for
+					streamLiveTime := di.LastSq * di.TargetDuration
+					minSeekTime := streamLiveTime - LiveMaximumSeekable
+					LogError("You must specify a --live-from value between: %s and %s", SecondsToDurationAndTimeStr(minSeekTime), SecondsToDurationAndTimeStr(streamLiveTime))
+					return errors.New("value is not valid for stream duration")
+				}
+
+				di.LiveFromSq = targetStartFrag
+				startTimeStr := SecondsToDurationAndTimeStr(di.LiveFromSq * di.TargetDuration)
+				totalTimeToGrabStr := SecondsToDurationAndTimeStr((maxSq - di.LiveFromSq) * di.TargetDuration)
+				LogGeneral("--live-from: Starting from stream time '%s' and grabbing '%s' of content (and counting).", startTimeStr, totalTimeToGrabStr)
+				LogDebug("Starting from sequence %d [max sq right now is %d]", di.LiveFromSq, maxSq)
 			}
-
-			di.LiveFromSq = di.LastSq + noOfFragsToJump
-			LogGeneral("--live-from: Waiting %s (%d seconds) before starting...", di.LiveFromVal, secondsRoundedToFragLength)
-			LogInfo("--live-from: Waiting %s (%d seconds) before starting. Will start from sequence %d [current sq right now is %d]", di.LiveFromVal, secondsRoundedToFragLength, di.LiveFromSq, di.LastSq)
-
-			time.Sleep(time.Duration(secondsRoundedToFragLength+di.TargetDuration) * time.Second) // Waits for the specified length of time +1 frag interval (2 or 5 seconds etc).
-			info.GetVideoInfo()                                                                   // And now that the duration has elapsed, re-grab the video information (to update the latest sq).
 		}
 	}
 
@@ -1124,7 +1143,7 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 			// --live-from: Set start sequence.
 			curFrag = di.LiveFromSq
 			startFrag = curFrag
-			LogWarn("[--live-from] %s: Starting from sequence %d (latest is %d)", dataType, startFrag, di.LastSq)
+			LogDebug("[--live-from] %s: Starting from sequence %d (latest is %d)", dataType, startFrag, di.LastSq)
 		} else if curFrag > 0 {
 			// Stream that has been live for more than 5 days.
 			LogWarn("%s: YT only retains the livestream 5 days past for seeking, starting from sequence %d (latest is %d)", dataType, curFrag, di.LastSq)

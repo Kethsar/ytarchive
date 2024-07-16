@@ -982,3 +982,54 @@ func GetFFmpegArgs(audioFile, videoFile, thumbnail, fileDir, fileName string, on
 		FileName: mergeFile,
 	}
 }
+
+func SecondsToDurationStr(seconds int) string {
+	days := seconds / (60 * 60 * 24)
+	seconds -= days * (60 * 60 * 24)
+
+	hours := seconds / (60 * 60)
+	seconds -= hours * (60 * 60)
+
+	minutes := seconds / 60
+	seconds -= minutes * 60
+
+	outputStr := ""
+	if days > 0 {
+		outputStr += fmt.Sprintf("%dd", days)
+	}
+	if hours > 0 {
+		outputStr += fmt.Sprintf("%dh", hours)
+	}
+	if minutes > 0 {
+		outputStr += fmt.Sprintf("%dm", minutes)
+	}
+	outputStr += fmt.Sprintf("%ds", seconds)
+
+	return outputStr
+}
+
+func SecondsToTimeStr(seconds int) string {
+	hours := seconds / (60 * 60)
+	seconds -= hours * (60 * 60)
+
+	minutes := seconds / 60
+	seconds -= minutes * 60
+
+	outputStr := ""
+	if hours > 0 {
+		outputStr += fmt.Sprintf("%0d:%02d:%02d", hours, minutes, seconds)
+	} else if minutes > 0 {
+		outputStr += fmt.Sprintf("%02d:%02d", minutes, seconds)
+	} else {
+		outputStr += fmt.Sprintf("%02d", seconds)
+	}
+
+	return outputStr
+}
+
+func SecondsToDurationAndTimeStr(seconds int) string {
+	durStr := SecondsToDurationStr(seconds)
+	timeStr := SecondsToTimeStr(seconds)
+
+	return durStr + " (" + timeStr + ")"
+}
