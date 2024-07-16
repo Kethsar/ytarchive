@@ -73,6 +73,14 @@ Options:
 	--error
 		Print only errors and general information.
 
+	--exec-after COMMAND_PATH
+		Execute the given COMMAND_PATH after a completed download.
+		The first argument to COMMAND_PATH will be the completed filename.
+
+	--exec-before COMMAND_PATH
+		Execute the given COMMAND_PATH before a download is started.
+		The first argument to COMMAND_PATH will be the target filename.
+
 	--ffmpeg-path FFMPEG_PATH
 		Set a specific ffmpeg location, including program name.
 		e.g. "C:\ffmpeg\ffmpeg.exe" or "/opt/ffmpeg/ffmpeg"
