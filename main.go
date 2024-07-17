@@ -298,14 +298,17 @@ Options:
 	--write-thumbnail
 		Write the thumbnail to a separate file.
 
-	--live-from [DURATION | TIMESTR] or 'now'
+	--live-from DURATION, TIMESTRING or NOW
 		Starts the download from the specified time in the future, the past or 'now'.
-		Use a negative value to skip back in time, positive value to wait to start.
-		Support time durations (e.g. 1d12h30m5s) or time strings (e.g. 12:30:05).
-		Examples: * '--live-from -01:10:00' will seek backwards 1 hour and 10 minutes and then 
-		            start downloading from that time.
-		          * '--live-from 45m30s' will wait 45 minutes and 30 seconds from now and then
-		            start downloading.
+		Use a negative time value to skip back in time from now.
+		Use a positive time value to specify the timestamp in the stream to start 
+		capturing from (from the start of the stream).
+
+		Supports time durations (e.g. 1d8h30m5s) or time strings (e.g. 32:30:05).
+		Examples: * '--live-from -01:10:00' will seek backwards 1 hour and 10 minutes from now
+					and then start downloading from that time.
+		          * '--live-from 1h10mm00s' will begin downloading from 1 hour 10 minutes 
+				    after the stream started.
 		          * '--live-from now' will start recording from the current stream time.
 
 Examples:
@@ -681,7 +684,6 @@ func run() int {
 	if info.LiveFromVal != "" {
 		err = info.ParseLiveFromStrVal()
 		if err != nil {
-			LogError("--live-from: " + err.Error())
 			return 1
 		}
 	}
