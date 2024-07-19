@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha1"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/xml"
 	"errors"
@@ -98,9 +99,8 @@ var (
 		Timeout:   15 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}
-	tlsNetworkOverrideDialer = &net.Dialer{
-		Timeout:   15 * time.Second,
-		KeepAlive: 30 * time.Second,
+	tlsNetworkOverrideDialer = &tls.Dialer{
+		NetDialer: networkOverrideDialer,
 	}
 	client *http.Client
 )
