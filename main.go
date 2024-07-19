@@ -759,7 +759,7 @@ func run() int {
 				err = json.Unmarshal(stateData, info.DLState[info.Quality])
 			}
 			if err == nil && len(tmpDir) == 0 {
-				tmpDir = info.DLState[AudioItag].TempDir
+				tmpDir = info.DLState[info.Quality].TempDir
 			}
 		}
 	}
