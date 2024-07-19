@@ -194,6 +194,7 @@ func InitializeHttpClient(proxyUrl *url.URL) {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 
 	tr.DialContext = DialContextOverride
+	tr.DialTLSContext = DialTLSContextOverride
 	tr.ResponseHeaderTimeout = 10 * time.Second
 	tr.IdleConnTimeout = 45 * time.Second
 	tr.TLSHandshakeTimeout = 10 * time.Second
