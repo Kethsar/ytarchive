@@ -95,7 +95,11 @@ var (
 	loglevel              = LoglevelWarning
 	networkType           = NetworkBoth // Set to force IPv4 or IPv6
 	networkOverrideDialer = &net.Dialer{
-		Timeout:   10 * time.Second,
+		Timeout:   15 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	tlsNetworkOverrideDialer = &net.Dialer{
+		Timeout:   15 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}
 	client *http.Client
@@ -182,11 +186,17 @@ func DialContextOverride(ctx context.Context, network, addr string) (net.Conn, e
 	return networkOverrideDialer.DialContext(ctx, networkType, addr)
 }
 
+func DialTLSContextOverride(ctx context.Context, network, addr string) (net.Conn, error) {
+	return tlsNetworkOverrideDialer.DialContext(ctx, networkType, addr)
+}
+
 func InitializeHttpClient(proxyUrl *url.URL) {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 
 	tr.DialContext = DialContextOverride
 	tr.ResponseHeaderTimeout = 10 * time.Second
+	tr.IdleConnTimeout = 45 * time.Second
+	tr.TLSHandshakeTimeout = 10 * time.Second
 	if proxyUrl != nil {
 		// Override ProxyFromEnvironment (default setting)
 		tr.Proxy = http.ProxyURL(proxyUrl)
