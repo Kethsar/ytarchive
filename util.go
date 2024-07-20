@@ -105,18 +105,6 @@ var (
 	client *http.Client
 )
 
-var fnameReplacer = strings.NewReplacer(
-	"<", "_",
-	">", "_",
-	":", "_",
-	`"`, "_",
-	"/", "_",
-	"\\", "_",
-	"|", "_",
-	"?", "_",
-	"*", "_",
-)
-
 /*
 Logging functions;
 ansi sgr 0=reset, 1=bold, while 3x sets the foreground color:
@@ -209,7 +197,33 @@ func InitializeHttpClient(proxyUrl *url.URL) {
 }
 
 // Remove any illegal filename chars
-func SterilizeFilename(s string) string {
+func SterilizeFilename(s string, lookalikeChars bool) string {
+	var fnameReplacer *strings.Replacer
+	if lookalikeChars {
+		fnameReplacer = strings.NewReplacer(
+			"<", "＜",
+			">", "＞",
+			":", "：",
+			`"`, "″",
+			"/", "⧸",
+			"\\", "⧹",
+			"|", "｜",
+			"?", "？",
+			"*", "＊",
+		)
+	} else {
+		fnameReplacer = strings.NewReplacer(
+			"<", "_",
+			">", "_",
+			":", "_",
+			`"`, "_",
+			"/", "_",
+			"\\", "_",
+			"|", "_",
+			"?", "_",
+			"*", "_",
+		)
+	}
 	return fnameReplacer.Replace(s)
 }
 
@@ -810,7 +824,7 @@ func FormatPythonMapString(format string, vals map[string]string) (string, error
 	}
 }
 
-func FormatFilename(format string, vals map[string]string) (string, error) {
+func FormatFilename(format string, vals map[string]string, lookalikeChars bool) (string, error) {
 	fnameVals := make(map[string]string)
 
 	for k, v := range vals {
@@ -818,7 +832,7 @@ func FormatFilename(format string, vals map[string]string) (string, error) {
 			fnameVals[k] = ""
 		}
 
-		fnameVals[k] = SterilizeFilename(v)
+		fnameVals[k] = SterilizeFilename(v, lookalikeChars)
 	}
 
 	fstr, err := FormatPythonMapString(format, fnameVals)
