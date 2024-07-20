@@ -91,6 +91,12 @@ Options:
 		Keep the final stream audio and video files after muxing them
 		instead of deleting them.
 
+	-l
+	--lookalike-chars
+		Use lookalikes for forbidden characters in the filename output format.
+		Emulates forbidden characters by using the same replacement characters as yt-dlp.
+		This will make the filenames look closer to the original titles.
+
 	--members-only
 		Only download members-only streams. Can only be used with channel URLs
 		such as /live, /streams, etc, and requires cookies.
@@ -334,7 +340,8 @@ FORMAT TEMPLATE OPTIONS
 	youtube-dl. See https://github.com/ytdl-org/youtube-dl#output-template
 
 	For file names, each template substitution is sanitized by replacing invalid file name
-	characters with underscore (_).
+	characters with an underscore (_). If '--lookalike-chars' is used, invalid file name
+	characters get replaced by the same lookalike characters that yt-dlp uses instead.
 
 	id (string): Video identifier
 	url (string): Video URL

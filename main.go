@@ -117,6 +117,12 @@ Options:
 		Keep the final stream audio and video files after muxing them
 		instead of deleting them.
 
+	-l
+	--lookalike-chars
+		Use lookalikes for forbidden characters in the filename output format.
+		Emulates forbidden characters by using the same replacement characters as yt-dlp.
+		This will make the filenames look closer to the original titles.
+
 	--members-only
 		Only download members-only streams. Can only be used with channel URLs
 		such as /live, /streams, etc, and requires cookies.
@@ -360,7 +366,8 @@ FORMAT TEMPLATE OPTIONS
 	youtube-dl. See https://github.com/ytdl-org/youtube-dl#output-template
 
 	For file names, each template substitution is sanitized by replacing invalid file name
-	characters with underscore (_).
+	characters with an underscore (_). If '--lookalike-chars' is used, invalid file name
+	characters get replaced by the same lookalike characters that yt-dlp uses instead.
 
 	id (string): Video identifier
 	url (string): Video URL
@@ -429,6 +436,7 @@ var (
 	membersOnly       bool
 	disableSaveState  bool
 	liveFrom          string
+	lookalikeChars    bool
 
 	cancelled = false
 )
@@ -478,6 +486,8 @@ func init() {
 	cliFlags.BoolVar(&statusNewlines, "newline", false, "Write progress to a new line instead of keeping it on one line.")
 	cliFlags.BoolVar(&keepTSFiles, "k", false, "Keep the raw .ts files instead of deleting them after muxing.")
 	cliFlags.BoolVar(&keepTSFiles, "keep-ts-files", false, "Keep the raw .ts files instead of deleting them after muxing.")
+	cliFlags.BoolVar(&lookalikeChars, "l", false, "Use lookalike replacement characters in place of forbidden characters.")
+	cliFlags.BoolVar(&lookalikeChars, "lookalike-chars", false, "Use lookalike replacement characters in place of forbidden characters.")
 	cliFlags.BoolVar(&separateAudio, "separate-audio", false, "Save a copy of the audio separately along with the muxed file.")
 	cliFlags.BoolVar(&monitorChannel, "monitor-channel", false, "Continually monitor a channel for streams.")
 	cliFlags.BoolVar(&membersOnly, "members-only", false, "Only download members-only streams when waiting on a channel URL such as /live.")
@@ -660,7 +670,7 @@ func run() int {
 		return 1
 	}
 
-	_, err = FormatFilename(fnameFormat, info.FormatInfo)
+	_, err = FormatFilename(fnameFormat, info.FormatInfo, lookalikeChars)
 	if err != nil {
 		LogError(err.Error())
 		return 1
@@ -693,7 +703,7 @@ func run() int {
 	audioOnly = info.Quality == AudioOnlyQuality
 
 	// We checked if there would be errors earlier, should be good
-	fullFPath, _ := FormatFilename(fnameFormat, info.FormatInfo)
+	fullFPath, _ := FormatFilename(fnameFormat, info.FormatInfo, lookalikeChars)
 	fdir := filepath.Dir(fullFPath)
 	tmpDir := ""
 	var absDir string
@@ -711,7 +721,7 @@ func run() int {
 	}
 
 	fname := filepath.Base(fullFPath)
-	fname = SterilizeFilename(fname)
+	fname = SterilizeFilename(fname, lookalikeChars)
 
 	if strings.HasPrefix(fname, "-") {
 		fname = "_" + fname
