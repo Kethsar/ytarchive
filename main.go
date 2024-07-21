@@ -303,7 +303,7 @@ Options:
 
 	--write-thumbnail
 		Write the thumbnail to a separate file.
-	
+
 	--live-from DURATION, TIMESTRING or NOW
 		Starts the download from the specified time in the future, the past or 'now'.
 		Use a negative time value to skip back in time from now.
@@ -522,7 +522,7 @@ func init() {
 	cliFlags.UintVar(&filePerms, "fp", 0644, "Filesystem permissions for the created files.")
 	cliFlags.UintVar(&filePerms, "file-permissions", 0644, "Filesystem permissions for the created files.")
 	cliFlags.StringVar(&liveFrom, "live-from", "", "Starts the download from the specified time instead of from the start.")
-	cliFlags.StringVar(&waitForStr, "wait-for", "", "Waits for a specified length of time before starting to capture. Use with '--live-from now' to delay starting.")
+	cliFlags.StringVar(&waitForStr, "wait-for", "", "Waits for a specified length of time before starting to capture a stream.")
 	cliFlags.StringVar(&durationStr, "capture-duration", "", "Captures for a specific length of time before stopping automatically.")
 
 	cliFlags.Func("video-url", "Googlevideo URL for the video stream.", func(s string) error {

@@ -771,11 +771,6 @@ func (di *DownloadInfo) ParseDurationStrVal(durationVal string) error {
 	}
 
 	di.DurationSecs = int(duration.Seconds())
-	// fragDur := float64(di.TargetDuration)
-	// secondsRoundedToFragLength := int(math.Ceil(secondsTotal/fragDur) * fragDur) // Rounds up to next frag interval time
-	// noOfFragsToDownload := secondsRoundedToFragLength / di.TargetDuration
-
-	// di.DurationEndSq = noOfFragsToDownload
 	return nil
 }
 

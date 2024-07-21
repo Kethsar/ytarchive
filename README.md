@@ -277,7 +277,7 @@ Options:
 
 	--write-thumbnail
 		Write the thumbnail to a separate file.
-	
+
 	--live-from DURATION, TIMESTRING or NOW
 		Starts the download from the specified time in the future, the past or 'now'.
 		Use a negative time value to skip back in time from now.
