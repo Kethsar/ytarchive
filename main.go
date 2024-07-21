@@ -317,9 +317,17 @@ Options:
 				    after the stream started.
 		          * '--live-from now' will start recording from the current stream time.
 
-	--duration [DURATION | TIMESTR]
-		Downloads the livestream for the specified length of time and then exits.
-		Supports time durations (e.g. 1d12h30m5s) or time strings (e.g. 12:30:05).
+	--wait-for DURATION or TIMESTRING
+		Waits for a specified length of time before starting to capture a stream. 
+		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
+
+		Note: * This command implicitly uses '--live-from now' after the wait period.
+		      * If the stream is a scheduled stream then wait-for 
+		        will not start counting until the stream has begun.
+
+	--capture-duration DURATION or TIMESTRING
+		Captures the livestream for the specified length of time and then exits.
+		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
 	
 Examples:
 	%[1]s -w
@@ -441,6 +449,7 @@ var (
 	disableSaveState  bool
 	liveFrom          string
 	lookalikeChars    bool
+	waitForStr        string
 	durationStr       string
 
 	cancelled = false
@@ -513,7 +522,8 @@ func init() {
 	cliFlags.UintVar(&filePerms, "fp", 0644, "Filesystem permissions for the created files.")
 	cliFlags.UintVar(&filePerms, "file-permissions", 0644, "Filesystem permissions for the created files.")
 	cliFlags.StringVar(&liveFrom, "live-from", "", "Starts the download from the specified time instead of from the start.")
-	cliFlags.StringVar(&durationStr, "duration", "", "Duration of the stream to capture before stopping.")
+	cliFlags.StringVar(&waitForStr, "wait-for", "", "Waits for a specified length of time before starting to capture. Use with '--live-from now' to delay starting.")
+	cliFlags.StringVar(&durationStr, "capture-duration", "", "Captures for a specific length of time before stopping automatically.")
 
 	cliFlags.Func("video-url", "Googlevideo URL for the video stream.", func(s string) error {
 		var itag int
@@ -586,7 +596,6 @@ func run() int {
 	info.DirMode = os.FileMode(dirPerms)
 	info.DisableSaveState = disableSaveState
 	info.LiveFromVal = liveFrom
-	info.DurationVal = durationStr
 
 	if doWait {
 		info.Wait = ActionDo
@@ -694,6 +703,13 @@ func run() int {
 		LogInfo("Loaded cookie file %s", cookieFile)
 	}
 
+	if waitForStr != "" {
+		err = info.ParseWaitForStrVal(waitForStr)
+		if err != nil {
+			return 1
+		}
+	}
+
 	if !info.GVideoDDL && !info.GetVideoInfo() {
 		return 1
 	}
@@ -705,13 +721,10 @@ func run() int {
 		}
 	}
 
-	if info.DurationVal != "" {
-		err = info.ParseDurationStrVal()
+	if durationStr != "" {
+		err = info.ParseDurationStrVal(durationStr)
 		if err != nil {
-			LogError("--duration: " + err.Error())
 			return 1
-		} else {
-			LogGeneral("--duration: Getting %s of content then exiting.", info.DurationVal)
 		}
 	}
 

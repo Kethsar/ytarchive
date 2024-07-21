@@ -278,10 +278,6 @@ Options:
 	--write-thumbnail
 		Write the thumbnail to a separate file.
 	
-	--duration [DURATION | TIMESTR]
-		Downloads the livestream for the specified length of time and then exits.
-		Supports time durations (e.g. 1d12h30m5s) or time strings (e.g. 12:30:05).
-
 	--live-from DURATION, TIMESTRING or NOW
 		Starts the download from the specified time in the future, the past or 'now'.
 		Use a negative time value to skip back in time from now.
@@ -295,6 +291,18 @@ Options:
 				    after the stream started.
 		          * '--live-from now' will start recording from the current stream time.
 
+	--wait-for DURATION or TIMESTRING
+		Waits for a specified length of time before starting to capture a stream. 
+		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
+
+		Note: * This command implicitly uses '--live-from now' after the wait period.
+		      * If the stream is a scheduled stream then wait-for 
+		        will not start counting until the stream has begun.
+
+	--capture-duration DURATION or TIMESTRING
+		Captures the livestream for the specified length of time and then exits.
+		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
+	
 Examples:
 	ytarchive -w
 		Waits for a stream. Will prompt for a URL and quality.
