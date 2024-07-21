@@ -486,6 +486,11 @@ func (di *DownloadInfo) GetPlayablePlayerResponse() (retrieved int, pr *PlayerRe
 				return PlayerResponseNotUsable, nil, nil
 			}
 
+			if di.LiveFromVal != "" && strings.HasPrefix(di.LiveFromVal, "-") {
+				LogError("Option --live-from with a negative duration is not valid for a scheduled stream.")
+				return PlayerResponseNotUsable, nil, nil
+			}
+
 			if di.Wait == ActionDoNot {
 				LogError("Stream has not started, and you have opted not to wait.")
 				return PlayerResponseNotUsable, nil, nil

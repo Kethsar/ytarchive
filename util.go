@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha1"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/xml"
 	"errors"
@@ -95,22 +96,13 @@ var (
 	loglevel              = LoglevelWarning
 	networkType           = NetworkBoth // Set to force IPv4 or IPv6
 	networkOverrideDialer = &net.Dialer{
-		Timeout:   10 * time.Second,
+		Timeout:   15 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}
+	tlsNetworkOverrideDialer = &tls.Dialer{
+		NetDialer: networkOverrideDialer,
+	}
 	client *http.Client
-)
-
-var fnameReplacer = strings.NewReplacer(
-	"<", "_",
-	">", "_",
-	":", "_",
-	`"`, "_",
-	"/", "_",
-	"\\", "_",
-	"|", "_",
-	"?", "_",
-	"*", "_",
 )
 
 /*
@@ -182,11 +174,18 @@ func DialContextOverride(ctx context.Context, network, addr string) (net.Conn, e
 	return networkOverrideDialer.DialContext(ctx, networkType, addr)
 }
 
+func DialTLSContextOverride(ctx context.Context, network, addr string) (net.Conn, error) {
+	return tlsNetworkOverrideDialer.DialContext(ctx, networkType, addr)
+}
+
 func InitializeHttpClient(proxyUrl *url.URL) {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 
 	tr.DialContext = DialContextOverride
+	tr.DialTLSContext = DialTLSContextOverride
 	tr.ResponseHeaderTimeout = 10 * time.Second
+	tr.IdleConnTimeout = 45 * time.Second
+	tr.TLSHandshakeTimeout = 10 * time.Second
 	if proxyUrl != nil {
 		// Override ProxyFromEnvironment (default setting)
 		tr.Proxy = http.ProxyURL(proxyUrl)
@@ -198,7 +197,33 @@ func InitializeHttpClient(proxyUrl *url.URL) {
 }
 
 // Remove any illegal filename chars
-func SterilizeFilename(s string) string {
+func SterilizeFilename(s string, lookalikeChars bool) string {
+	var fnameReplacer *strings.Replacer
+	if lookalikeChars {
+		fnameReplacer = strings.NewReplacer(
+			"<", "＜",
+			">", "＞",
+			":", "：",
+			`"`, "″",
+			"/", "⧸",
+			"\\", "⧹",
+			"|", "｜",
+			"?", "？",
+			"*", "＊",
+		)
+	} else {
+		fnameReplacer = strings.NewReplacer(
+			"<", "_",
+			">", "_",
+			":", "_",
+			`"`, "_",
+			"/", "_",
+			"\\", "_",
+			"|", "_",
+			"?", "_",
+			"*", "_",
+		)
+	}
 	return fnameReplacer.Replace(s)
 }
 
@@ -692,8 +717,8 @@ func HandleFragDownloadError(di *DownloadInfo, state *fragThreadState, err error
 	}
 }
 
-func TryMove(srcFile, dstFile string) error {
-	_, err := os.Stat(srcFile)
+func TryMove(srcFileName, dstFileName string) error {
+	_, err := os.Stat(srcFileName)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			LogWarn("Error moving file: %s", err)
@@ -703,11 +728,38 @@ func TryMove(srcFile, dstFile string) error {
 		return nil
 	}
 
-	LogInfo("Moving file %s to %s", srcFile, dstFile)
+	LogInfo("Moving file %s to %s", srcFileName, dstFileName)
 
-	err = os.Rename(srcFile, dstFile)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		LogWarn("Error moving file: %s", err)
+	err = os.Rename(srcFileName, dstFileName)
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+
+	// Rename failed, manually copy the file
+	LogWarn("Error moving file: %s", err)
+	LogWarn("Attempting to copy file instead")
+
+	srcFile, err := os.Open(srcFileName)
+	if err != nil {
+		LogWarn("Error copying file: %s", err)
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dstFileName)
+	if err != nil {
+		LogWarn("Error copying file: %s", err)
+		return err
+	}
+	defer dstFile.Close()
+
+	if _, err = io.Copy(dstFile, srcFile); err != nil {
+		LogWarn("Error copying file: %s", err)
+		return err
+	}
+
+	if err = os.Remove(srcFileName); err != nil {
+		LogWarn("Error removing file after copying: %s", err)
 		return err
 	}
 
@@ -772,7 +824,7 @@ func FormatPythonMapString(format string, vals map[string]string) (string, error
 	}
 }
 
-func FormatFilename(format string, vals map[string]string) (string, error) {
+func FormatFilename(format string, vals map[string]string, lookalikeChars bool) (string, error) {
 	fnameVals := make(map[string]string)
 
 	for k, v := range vals {
@@ -780,7 +832,7 @@ func FormatFilename(format string, vals map[string]string) (string, error) {
 			fnameVals[k] = ""
 		}
 
-		fnameVals[k] = SterilizeFilename(v)
+		fnameVals[k] = SterilizeFilename(v, lookalikeChars)
 	}
 
 	fstr, err := FormatPythonMapString(format, fnameVals)
@@ -981,4 +1033,55 @@ func GetFFmpegArgs(audioFile, videoFile, thumbnail, fileDir, fileName string, on
 		Args:     ffmpegArgs,
 		FileName: mergeFile,
 	}
+}
+
+func SecondsToDurationStr(seconds int) string {
+	days := seconds / (60 * 60 * 24)
+	seconds -= days * (60 * 60 * 24)
+
+	hours := seconds / (60 * 60)
+	seconds -= hours * (60 * 60)
+
+	minutes := seconds / 60
+	seconds -= minutes * 60
+
+	outputStr := ""
+	if days > 0 {
+		outputStr += fmt.Sprintf("%dd", days)
+	}
+	if hours > 0 {
+		outputStr += fmt.Sprintf("%dh", hours)
+	}
+	if minutes > 0 {
+		outputStr += fmt.Sprintf("%dm", minutes)
+	}
+	outputStr += fmt.Sprintf("%ds", seconds)
+
+	return outputStr
+}
+
+func SecondsToTimeStr(seconds int) string {
+	hours := seconds / (60 * 60)
+	seconds -= hours * (60 * 60)
+
+	minutes := seconds / 60
+	seconds -= minutes * 60
+
+	outputStr := ""
+	if hours > 0 {
+		outputStr += fmt.Sprintf("%0d:%02d:%02d", hours, minutes, seconds)
+	} else if minutes > 0 {
+		outputStr += fmt.Sprintf("%02d:%02d", minutes, seconds)
+	} else {
+		outputStr += fmt.Sprintf("%02d", seconds)
+	}
+
+	return outputStr
+}
+
+func SecondsToDurationAndTimeStr(seconds int) string {
+	durStr := SecondsToDurationStr(seconds)
+	timeStr := SecondsToTimeStr(seconds)
+
+	return durStr + " (" + timeStr + ")"
 }
