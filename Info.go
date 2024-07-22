@@ -176,13 +176,13 @@ type DownloadInfo struct {
 	LiveFromVal      string
 	LiveFromSq       int
 
-	Thumbnail       string
-	VideoID         string
-	URL             string
-	SelectedQuality string
-	Status          string
-	DurationSecs    int
-	WaitForSecs     int
+	Thumbnail           string
+	VideoID             string
+	URL                 string
+	SelectedQuality     string
+	Status              string
+	CaptureDurationSecs int
+	StartDelaySecs      int
 
 	FragMaxTries   uint
 	Wait           int
@@ -754,7 +754,7 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 	return urls
 }
 
-func (di *DownloadInfo) ParseDurationStrVal(durationVal string) error {
+func (di *DownloadInfo) ParseCaptureDurationStrVal(durationVal string) error {
 	if durationVal == "" {
 		return nil
 	}
@@ -770,11 +770,11 @@ func (di *DownloadInfo) ParseDurationStrVal(durationVal string) error {
 		}
 	}
 
-	di.DurationSecs = int(duration.Seconds())
+	di.CaptureDurationSecs = int(duration.Seconds())
 	return nil
 }
 
-func (di *DownloadInfo) ParseWaitForStrVal(durationVal string) error {
+func (di *DownloadInfo) ParseStartDelayStrVal(durationVal string) error {
 	if durationVal == "" {
 		return nil
 	}
@@ -790,7 +790,7 @@ func (di *DownloadInfo) ParseWaitForStrVal(durationVal string) error {
 		}
 	}
 
-	di.WaitForSecs = int(duration.Seconds())
+	di.StartDelaySecs = int(duration.Seconds())
 	return nil
 }
 
@@ -941,9 +941,9 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 	di.Live = isLive
 
 	// --wait-for
-	if isLive && di.WaitForSecs > 0 {
+	if isLive && di.StartDelaySecs > 0 {
 		fragDur := float64(di.TargetDuration)
-		secondsRoundedToFragLength := int(math.Ceil(float64(di.WaitForSecs)/fragDur) * fragDur) // Rounds up to next frag interval time
+		secondsRoundedToFragLength := int(math.Ceil(float64(di.StartDelaySecs)/fragDur) * fragDur) // Rounds up to next frag interval time
 		noOfFragsToSkip := secondsRoundedToFragLength / di.TargetDuration
 		di.LiveFromSq = di.LastSq + noOfFragsToSkip
 
@@ -1119,10 +1119,10 @@ func (di *DownloadInfo) DownloadFrags(dataType string, seqChan <-chan *seqChanIn
 		}
 
 		// --capture-duration: Stop if reaching the maximum DurationSecs.
-		if di.DurationSecs != 0 {
+		if di.CaptureDurationSecs != 0 {
 			if endFrag == 0 {
-				LogGeneral("[%s] --capture-duration: Capturing %s of content and then exiting...", name, SecondsToDurationAndTimeStr(di.DurationSecs))
-				endFrag = seqInfo.CurSequence + (di.DurationSecs / di.TargetDuration) // Calculate ending frag based on DurationSecs.
+				LogGeneral("[%s] --capture-duration: Capturing %s of content and then exiting...", name, SecondsToDurationAndTimeStr(di.CaptureDurationSecs))
+				endFrag = seqInfo.CurSequence + (di.CaptureDurationSecs / di.TargetDuration) // Calculate ending frag based on DurationSecs.
 			} else {
 				if seqInfo.CurSequence >= endFrag {
 					LogDebug("%s: Reached the maximum duration specified by the --duration option.", name)

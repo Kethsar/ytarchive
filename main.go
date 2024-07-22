@@ -317,7 +317,7 @@ Options:
 				    after the stream started.
 		          * '--live-from now' will start recording from the current stream time.
 
-	--wait-for DURATION or TIMESTRING
+	--start-delay DURATION or TIMESTRING
 		Waits for a specified length of time before starting to capture a stream. 
 		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
 
@@ -326,7 +326,7 @@ Options:
 		        will not start counting until the stream has begun.
 
 	--capture-duration DURATION or TIMESTRING
-		Captures the livestream for the specified length of time and then exits.
+		Captures the livestream for the specified length of time and then exits automatically.
 		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
 	
 Examples:
@@ -449,8 +449,8 @@ var (
 	disableSaveState  bool
 	liveFrom          string
 	lookalikeChars    bool
-	waitForStr        string
-	durationStr       string
+	startDelayStr     string
+	capDurationStr    string
 
 	cancelled = false
 )
@@ -522,8 +522,8 @@ func init() {
 	cliFlags.UintVar(&filePerms, "fp", 0644, "Filesystem permissions for the created files.")
 	cliFlags.UintVar(&filePerms, "file-permissions", 0644, "Filesystem permissions for the created files.")
 	cliFlags.StringVar(&liveFrom, "live-from", "", "Starts the download from the specified time instead of from the start.")
-	cliFlags.StringVar(&waitForStr, "wait-for", "", "Waits for a specified length of time before starting to capture a stream.")
-	cliFlags.StringVar(&durationStr, "capture-duration", "", "Captures for a specific length of time before stopping automatically.")
+	cliFlags.StringVar(&startDelayStr, "start-delay", "", "Waits for a specified length of time before starting to capture a stream.")
+	cliFlags.StringVar(&capDurationStr, "capture-duration", "", "Captures the livestream for the specified length of time and then exits automatically.")
 
 	cliFlags.Func("video-url", "Googlevideo URL for the video stream.", func(s string) error {
 		var itag int
@@ -703,8 +703,8 @@ func run() int {
 		LogInfo("Loaded cookie file %s", cookieFile)
 	}
 
-	if waitForStr != "" {
-		err = info.ParseWaitForStrVal(waitForStr)
+	if startDelayStr != "" {
+		err = info.ParseStartDelayStrVal(startDelayStr)
 		if err != nil {
 			return 1
 		}
@@ -721,8 +721,8 @@ func run() int {
 		}
 	}
 
-	if durationStr != "" {
-		err = info.ParseDurationStrVal(durationStr)
+	if capDurationStr != "" {
+		err = info.ParseCaptureDurationStrVal(capDurationStr)
 		if err != nil {
 			return 1
 		}
