@@ -1112,7 +1112,7 @@ func (di *DownloadInfo) DownloadFrags(dataType string, seqChan <-chan *seqChanIn
 		time.Duration(di.TargetDuration)*time.Second,
 	)
 
-	var endFrag int // End fragment number to stop on for the --duration option.
+	var endSeq int // End seq to stop on for the --capture-duration option.
 	for seqInfo := range seqChan {
 		if di.IsStopping() || di.IsFinished(dataType) {
 			break
@@ -1120,11 +1120,11 @@ func (di *DownloadInfo) DownloadFrags(dataType string, seqChan <-chan *seqChanIn
 
 		// --capture-duration: Stop if reaching the maximum DurationSecs.
 		if di.CaptureDurationSecs != 0 {
-			if endFrag == 0 {
+			if endSeq == 0 {
 				LogGeneral("[%s] --capture-duration: Capturing %s of content and then exiting...", name, SecondsToDurationAndTimeStr(di.CaptureDurationSecs))
-				endFrag = seqInfo.CurSequence + (di.CaptureDurationSecs / di.TargetDuration) // Calculate ending frag based on DurationSecs.
+				endSeq = seqInfo.CurSequence + (di.CaptureDurationSecs / di.TargetDuration) // Calculate ending seq based on current seq number and DurationSecs.
 			} else {
-				if seqInfo.CurSequence >= endFrag {
+				if seqInfo.CurSequence >= endSeq {
 					LogDebug("%s: Reached the maximum duration specified by the --duration option.", name)
 					di.SetFinished(dataType)
 					break
