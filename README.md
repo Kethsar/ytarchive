@@ -296,11 +296,12 @@ Options:
 		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
 		
 		Note: * NOT supported when using also using '--live-from'.
-		      * If the stream is a scheduled stream then wait-for 
-		        will not start until the stream has begun.
+		      * If the stream is scheduled and has not yet begun then
+			    the delay does not start counting until the stream has begun.
 
 	--capture-duration DURATION or TIMESTRING
-		Captures the livestream for the specified length of time and then exits automatically.
+		Captures a livestream for the specified length of time 
+		and then exits and finalizes the video.
 		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
 
 Examples:
