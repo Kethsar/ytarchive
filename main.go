@@ -318,16 +318,16 @@ Options:
 		          * '--live-from now' will start recording from the current stream time.
 
 	--start-delay DURATION or TIMESTRING
-		Waits for a specified length of time before starting to capture a stream. 
-		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
-
-		Note: * This command implicitly uses '--live-from now' after the wait period.
+		Waits for a specified length of time before starting to capture a stream.
+		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 01:30:00).
+		
+		Note: * NOT supported when using also using '--live-from'.
 		      * If the stream is a scheduled stream then wait-for 
-		        will not start counting until the stream has begun.
+		        will not start until the stream has begun.
 
 	--capture-duration DURATION or TIMESTRING
 		Captures the livestream for the specified length of time and then exits automatically.
-		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
+		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 01:30:00).
 	
 Examples:
 	%[1]s -w
@@ -704,6 +704,12 @@ func run() int {
 	}
 
 	if startDelayStr != "" {
+		// Not supported when also using --live-from
+		if liveFrom != "" {
+			LogError("You cannot use both --start-delay and --live-from at the same time.")
+			return 1
+		}
+
 		err = info.ParseStartDelayStrVal(startDelayStr)
 		if err != nil {
 			return 1

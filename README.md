@@ -292,12 +292,12 @@ Options:
 		          * '--live-from now' will start recording from the current stream time.
 
 	--start-delay DURATION or TIMESTRING
-		Waits for a specified length of time before starting to capture a stream. 
+		Waits for a specified length of time before starting to capture a stream from that time.
 		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
-
-		Note: * This command implicitly uses '--live-from now' after the wait period.
+		
+		Note: * NOT supported when using also using '--live-from'.
 		      * If the stream is a scheduled stream then wait-for 
-		        will not start counting until the stream has begun.
+		        will not start until the stream has begun.
 
 	--capture-duration DURATION or TIMESTRING
 		Captures the livestream for the specified length of time and then exits automatically.
