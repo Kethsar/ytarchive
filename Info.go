@@ -1125,7 +1125,7 @@ func (di *DownloadInfo) DownloadFrags(dataType string, seqChan <-chan *seqChanIn
 				endSeq = seqInfo.CurSequence + (di.CaptureDurationSecs / di.TargetDuration) // Calculate ending seq based on current seq number and DurationSecs.
 			} else {
 				if seqInfo.CurSequence >= endSeq {
-					LogDebug("%s: Reached the maximum duration specified by the --duration option.", name)
+					LogDebug("%s: Reached the maximum duration specified by --capture-duration.", name)
 					di.SetFinished(dataType)
 					break
 				}
