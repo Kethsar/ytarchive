@@ -785,7 +785,7 @@ func (di *DownloadInfo) ParseStartDelayStrVal(durationVal string) error {
 		// Try to parse the value as a HH:MM:SS string
 		duration, err = hhmmss.Parse(durationVal)
 		if err != nil {
-			LogError("--wait-for: Unable to parse value as either a Duration or a Time String: %v", err)
+			LogError("--start-delay: Unable to parse value as either a Duration or a Time String: %v", err)
 			return errors.New("invalid duration string")
 		}
 	}
@@ -940,14 +940,14 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 
 	di.Live = isLive
 
-	// --wait-for
+	// --start-delay
 	if isLive && di.StartDelaySecs > 0 {
 		fragDur := float64(di.TargetDuration)
 		secondsRoundedToFragLength := int(math.Ceil(float64(di.StartDelaySecs)/fragDur) * fragDur) // Rounds up to next frag interval time
 		noOfFragsToSkip := secondsRoundedToFragLength / di.TargetDuration
 		di.LiveFromSq = di.LastSq + noOfFragsToSkip
 
-		LogGeneral("--wait-for: Waiting %s before starting to download...", SecondsToDurationAndTimeStr(secondsRoundedToFragLength))
+		LogGeneral("--start-delay: Waiting %s before starting to download...", SecondsToDurationAndTimeStr(secondsRoundedToFragLength))
 		LogDebug("	Will start from sequence %d [current sq right now is %d]", di.LiveFromSq, di.LastSq)
 
 		time.Sleep(time.Duration(secondsRoundedToFragLength) * time.Second) // Waits for the specified length of time.
@@ -1177,7 +1177,12 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 	var resumedState bool = false
 	if di.DLState[itag].Fragments > 0 {
 		if di.LiveFromSq != 0 {
-			LogWarn("%s: Option --live-from or --wait-for is being ignored as a download is being resumed.", dataType)
+			if di.LiveFromVal != "" {
+				LogWarn("%s: Option --live-from is being ignored as a download is being resumed.", dataType)
+			}
+			if di.StartDelaySecs != 0 {
+				LogWarn("%s: Option --start-delay is being ignored as a download is being resumed.", dataType)
+			}
 		}
 
 		f, err = os.OpenFile(dataFile, os.O_RDWR, 0666)
@@ -1211,10 +1216,16 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 		}
 
 		if di.LiveFromSq != 0 {
-			// --live-from or --wait-for: Set start sequence.
+			// --live-from or --start-delay: Set start sequence.
 			curFrag = di.LiveFromSq
 			startFrag = curFrag
-			LogDebug("[--live-from / --wait-for] %s: Starting from sequence %d (latest is %d)", dataType, startFrag, di.LastSq)
+
+			if di.LiveFromVal != "" {
+				LogDebug("[--live-from] %s: Starting from sequence %d (latest is %d)", dataType, startFrag, di.LastSq)
+			}
+			if di.StartDelaySecs != 0 {
+				LogDebug("[--start-delay] %s: Starting from sequence %d (latest is %d)", dataType, startFrag, di.LastSq)
+			}
 		} else if curFrag > 0 {
 			// Stream that has been live for more than 5 days.
 			LogWarn("%s: YT only retains the livestream 5 days past for seeking, starting from sequence %d (latest is %d)", dataType, curFrag, di.LastSq)
