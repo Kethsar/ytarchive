@@ -940,8 +940,11 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 
 	di.Live = isLive
 
-	// --start-delay
-	if isLive && di.StartDelaySecs > 0 {
+	return true
+}
+
+func (di *DownloadInfo) WaitForStartDelay() bool {
+	if di.Live && di.StartDelaySecs > 0 {
 		fragDur := float64(di.TargetDuration)
 		secondsRoundedToFragLength := int(math.Ceil(float64(di.StartDelaySecs)/fragDur) * fragDur) // Rounds up to next frag interval time
 		noOfFragsToSkip := secondsRoundedToFragLength / di.TargetDuration
@@ -951,7 +954,7 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 		LogDebug("	Will start from sequence %d [current sq right now is %d]", di.LiveFromSq, di.LastSq)
 
 		time.Sleep(time.Duration(secondsRoundedToFragLength) * time.Second) // Waits for the specified length of time.
-		di.GetDownloadUrls(pr)                                              // Re-grab video metadata
+		return !di.GetVideoInfo()                                           // Re-grab video information.
 	}
 
 	return true

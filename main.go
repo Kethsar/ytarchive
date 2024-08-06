@@ -323,7 +323,8 @@ Options:
 		
 		Note: * NOT supported when using also using '--live-from'.
 		      * If the stream is scheduled and has not yet begun then
-			    the delay does not start counting until the stream has begun.
+		        the delay does not start counting until the stream has begun.
+		      * Ignored when resuming a download.
 
 	--capture-duration DURATION or TIMESTRING
 		Captures a livestream for the specified length of time 
@@ -717,19 +718,19 @@ func run() int {
 		}
 	}
 
-	if !info.GVideoDDL && !info.GetVideoInfo() {
-		return 1
-	}
-
-	if info.LiveFromVal != "" {
-		err = info.ParseLiveFromStrVal()
+	if capDurationStr != "" {
+		err = info.ParseCaptureDurationStrVal(capDurationStr)
 		if err != nil {
 			return 1
 		}
 	}
 
-	if capDurationStr != "" {
-		err = info.ParseCaptureDurationStrVal(capDurationStr)
+	if !info.GVideoDDL && !info.GetVideoInfo() {
+		return 1
+	}
+
+	if liveFrom != "" {
+		err = info.ParseLiveFromStrVal()
 		if err != nil {
 			return 1
 		}
@@ -808,6 +809,16 @@ func run() int {
 			if err == nil && len(tmpDir) == 0 {
 				tmpDir = info.DLState[info.Quality].TempDir
 			}
+		}
+	}
+
+	// --start-delay, do not process if resuming a download.
+	if info.DLState[AudioItag].Fragments != 0 || info.DLState[info.Quality].Fragments != 0 {
+		LogWarn("Option --start-delay is being ignored as a download is being resumed.")
+	} else {
+		if !info.WaitForStartDelay() {
+			LogError("Got an error when re-grabbing video info after the delay period elapsed. Exiting.")
+			return 1
 		}
 	}
 

@@ -297,7 +297,8 @@ Options:
 		
 		Note: * NOT supported when using also using '--live-from'.
 		      * If the stream is scheduled and has not yet begun then
-			    the delay does not start counting until the stream has begun.
+		        the delay does not start counting until the stream has begun.
+		      * Ignored when resuming a download.
 
 	--capture-duration DURATION or TIMESTRING
 		Captures a livestream for the specified length of time 
