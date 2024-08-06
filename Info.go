@@ -176,11 +176,13 @@ type DownloadInfo struct {
 	LiveFromVal      string
 	LiveFromSq       int
 
-	Thumbnail       string
-	VideoID         string
-	URL             string
-	SelectedQuality string
-	Status          string
+	Thumbnail           string
+	VideoID             string
+	URL                 string
+	SelectedQuality     string
+	Status              string
+	CaptureDurationSecs int
+	StartDelaySecs      int
 
 	FragMaxTries   uint
 	Wait           int
@@ -752,6 +754,46 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 	return urls
 }
 
+func (di *DownloadInfo) ParseCaptureDurationStrVal(durationVal string) error {
+	if durationVal == "" {
+		return nil
+	}
+
+	// Try to parse the value as a duration string
+	duration, err := str2duration.ParseDuration(durationVal)
+	if err != nil {
+		// Try to parse the value as a HH:MM:SS string
+		duration, err = hhmmss.Parse(durationVal)
+		if err != nil {
+			LogError("--capture-duration: Unable to parse value as either a Duration or a Time String: %v", err)
+			return errors.New("invalid duration string")
+		}
+	}
+
+	di.CaptureDurationSecs = int(duration.Seconds())
+	return nil
+}
+
+func (di *DownloadInfo) ParseStartDelayStrVal(durationVal string) error {
+	if durationVal == "" {
+		return nil
+	}
+
+	// Try to parse the value as a duration string
+	duration, err := str2duration.ParseDuration(durationVal)
+	if err != nil {
+		// Try to parse the value as a HH:MM:SS string
+		duration, err = hhmmss.Parse(durationVal)
+		if err != nil {
+			LogError("--start-delay: Unable to parse value as either a Duration or a Time String: %v", err)
+			return errors.New("invalid duration string")
+		}
+	}
+
+	di.StartDelaySecs = int(duration.Seconds())
+	return nil
+}
+
 // Get necessary video info such as video/audio URLs
 func (di *DownloadInfo) GetVideoInfo() bool {
 	di.Lock()
@@ -897,6 +939,23 @@ func (di *DownloadInfo) GetVideoInfo() bool {
 	}
 
 	di.Live = isLive
+
+	return true
+}
+
+func (di *DownloadInfo) WaitForStartDelay() bool {
+	if di.Live && di.StartDelaySecs > 0 {
+		fragDur := float64(di.TargetDuration)
+		secondsRoundedToFragLength := int(math.Ceil(float64(di.StartDelaySecs)/fragDur) * fragDur) // Rounds up to next frag interval time
+		noOfFragsToSkip := secondsRoundedToFragLength / di.TargetDuration
+		di.LiveFromSq = di.LastSq + noOfFragsToSkip
+
+		LogGeneral("--start-delay: Waiting %s before starting to download...", SecondsToDurationAndTimeStr(secondsRoundedToFragLength))
+		LogDebug("	Will start from sequence %d [current sq right now is %d]", di.LiveFromSq, di.LastSq)
+
+		time.Sleep(time.Duration(secondsRoundedToFragLength) * time.Second) // Waits for the specified length of time.
+		return !di.GetVideoInfo()                                           // Re-grab video information.
+	}
 
 	return true
 }
@@ -1056,9 +1115,24 @@ func (di *DownloadInfo) DownloadFrags(dataType string, seqChan <-chan *seqChanIn
 		time.Duration(di.TargetDuration)*time.Second,
 	)
 
+	var endSeq int // End seq to stop on for the --capture-duration option.
 	for seqInfo := range seqChan {
 		if di.IsStopping() || di.IsFinished(dataType) {
 			break
+		}
+
+		// --capture-duration: Stop if reaching the maximum DurationSecs.
+		if di.CaptureDurationSecs != 0 {
+			if endSeq == 0 {
+				LogGeneral("[%s] --capture-duration: Capturing %s of content and then exiting...", name, SecondsToDurationAndTimeStr(di.CaptureDurationSecs))
+				endSeq = seqInfo.CurSequence + (di.CaptureDurationSecs / di.TargetDuration) // Calculate ending seq based on current seq number and DurationSecs.
+			} else {
+				if seqInfo.CurSequence >= endSeq {
+					LogDebug("%s: Reached the maximum duration specified by --capture-duration.", name)
+					di.SetFinished(dataType)
+					break
+				}
+			}
 		}
 
 		if seqInfo.MaxSequence > -1 && !di.IsLive() && seqInfo.CurSequence >= seqInfo.MaxSequence {
@@ -1106,7 +1180,12 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 	var resumedState bool = false
 	if di.DLState[itag].Fragments > 0 {
 		if di.LiveFromSq != 0 {
-			LogWarn("%s: Option --live-from is being ignored as download is being resumed.", dataType)
+			if di.LiveFromVal != "" {
+				LogWarn("%s: Option --live-from is being ignored as a download is being resumed.", dataType)
+			}
+			if di.StartDelaySecs != 0 {
+				LogWarn("%s: Option --start-delay is being ignored as a download is being resumed.", dataType)
+			}
 		}
 
 		f, err = os.OpenFile(dataFile, os.O_RDWR, 0666)
@@ -1140,10 +1219,16 @@ func (di *DownloadInfo) DownloadStream(dataType, dataFile string, progressChan c
 		}
 
 		if di.LiveFromSq != 0 {
-			// --live-from: Set start sequence.
+			// --live-from or --start-delay: Set start sequence.
 			curFrag = di.LiveFromSq
 			startFrag = curFrag
-			LogDebug("[--live-from] %s: Starting from sequence %d (latest is %d)", dataType, startFrag, di.LastSq)
+
+			if di.LiveFromVal != "" {
+				LogDebug("[--live-from] %s: Starting from sequence %d (latest is %d)", dataType, startFrag, di.LastSq)
+			}
+			if di.StartDelaySecs != 0 {
+				LogDebug("[--start-delay] %s: Starting from sequence %d (latest is %d)", dataType, startFrag, di.LastSq)
+			}
 		} else if curFrag > 0 {
 			// Stream that has been live for more than 5 days.
 			LogWarn("%s: YT only retains the livestream 5 days past for seeking, starting from sequence %d (latest is %d)", dataType, curFrag, di.LastSq)

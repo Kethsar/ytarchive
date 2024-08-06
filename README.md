@@ -291,6 +291,20 @@ Options:
 				    after the stream started.
 		          * '--live-from now' will start recording from the current stream time.
 
+	--start-delay DURATION or TIMESTRING
+		Waits for a specified length of time before starting to capture a stream from that time.
+		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
+		
+		Note: * NOT supported when using also using '--live-from'.
+		      * If the stream is scheduled and has not yet begun then
+		        the delay does not start counting until the stream has begun.
+		      * Ignored when resuming a download.
+
+	--capture-duration DURATION or TIMESTRING
+		Captures a livestream for the specified length of time 
+		and then exits and finalizes the video.
+		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
+
 Examples:
 	ytarchive -w
 		Waits for a stream. Will prompt for a URL and quality.

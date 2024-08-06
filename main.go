@@ -317,6 +317,20 @@ Options:
 				    after the stream started.
 		          * '--live-from now' will start recording from the current stream time.
 
+	--start-delay DURATION or TIMESTRING
+		Waits for a specified length of time before starting to capture a stream.
+		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 01:30:00).
+		
+		Note: * NOT supported when using also using '--live-from'.
+		      * If the stream is scheduled and has not yet begun then
+		        the delay does not start counting until the stream has begun.
+		      * Ignored when resuming a download.
+
+	--capture-duration DURATION or TIMESTRING
+		Captures a livestream for the specified length of time 
+		and then exits and finalizes the video.
+		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 01:30:00).
+	
 Examples:
 	%[1]s -w
 		Waits for a stream. Will prompt for a URL and quality.
@@ -437,6 +451,8 @@ var (
 	disableSaveState  bool
 	liveFrom          string
 	lookalikeChars    bool
+	startDelayStr     string
+	capDurationStr    string
 
 	cancelled = false
 )
@@ -508,6 +524,8 @@ func init() {
 	cliFlags.UintVar(&filePerms, "fp", 0644, "Filesystem permissions for the created files.")
 	cliFlags.UintVar(&filePerms, "file-permissions", 0644, "Filesystem permissions for the created files.")
 	cliFlags.StringVar(&liveFrom, "live-from", "", "Starts the download from the specified time instead of from the start.")
+	cliFlags.StringVar(&startDelayStr, "start-delay", "", "Waits for a specified length of time before starting to capture a stream.")
+	cliFlags.StringVar(&capDurationStr, "capture-duration", "", "Captures the livestream for the specified length of time and then exits automatically.")
 
 	cliFlags.Func("video-url", "Googlevideo URL for the video stream.", func(s string) error {
 		var itag int
@@ -687,11 +705,31 @@ func run() int {
 		LogInfo("Loaded cookie file %s", cookieFile)
 	}
 
+	if startDelayStr != "" {
+		// Not supported when also using --live-from
+		if liveFrom != "" {
+			LogError("You cannot use both --start-delay and --live-from at the same time.")
+			return 1
+		}
+
+		err = info.ParseStartDelayStrVal(startDelayStr)
+		if err != nil {
+			return 1
+		}
+	}
+
+	if capDurationStr != "" {
+		err = info.ParseCaptureDurationStrVal(capDurationStr)
+		if err != nil {
+			return 1
+		}
+	}
+
 	if !info.GVideoDDL && !info.GetVideoInfo() {
 		return 1
 	}
 
-	if info.LiveFromVal != "" {
+	if liveFrom != "" {
 		err = info.ParseLiveFromStrVal()
 		if err != nil {
 			return 1
@@ -771,6 +809,16 @@ func run() int {
 			if err == nil && len(tmpDir) == 0 {
 				tmpDir = info.DLState[info.Quality].TempDir
 			}
+		}
+	}
+
+	// --start-delay, do not process if resuming a download.
+	if info.DLState[AudioItag].Fragments != 0 || info.DLState[info.Quality].Fragments != 0 {
+		LogWarn("Option --start-delay is being ignored as a download is being resumed.")
+	} else {
+		if !info.WaitForStartDelay() {
+			LogError("Got an error when re-grabbing video info after the delay period elapsed. Exiting.")
+			return 1
 		}
 	}
 
