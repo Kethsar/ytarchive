@@ -723,6 +723,7 @@ func run() int {
 		if err != nil {
 			return 1
 		}
+		LogGeneral("Downloading %s of content and then exiting...", SecondsToDurationAndTimeStr(info.CaptureDurationSecs))
 	}
 
 	if !info.GVideoDDL && !info.GetVideoInfo() {
@@ -813,7 +814,7 @@ func run() int {
 	}
 
 	// --start-delay, do not process if resuming a download.
-	if info.DLState[AudioItag].Fragments != 0 || info.DLState[info.Quality].Fragments != 0 {
+	if info.StartDelaySecs != 0 && (info.DLState[AudioItag].Fragments != 0 || info.DLState[info.Quality].Fragments != 0) {
 		LogWarn("Option --start-delay is being ignored as a download is being resumed.")
 	} else {
 		if !info.WaitForStartDelay() {
