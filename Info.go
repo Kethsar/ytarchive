@@ -954,7 +954,7 @@ func (di *DownloadInfo) WaitForStartDelay() bool {
 		LogDebug("	Will start from sequence %d [current sq right now is %d]", di.LiveFromSq, di.LastSq)
 
 		time.Sleep(time.Duration(secondsRoundedToFragLength) * time.Second) // Waits for the specified length of time.
-		return !di.GetVideoInfo()                                           // Re-grab video information.
+		return di.GetVideoInfo()                                            // Re-grab video information.
 	}
 
 	return true
