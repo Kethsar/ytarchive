@@ -723,7 +723,7 @@ func run() int {
 		if err != nil {
 			return 1
 		}
-		LogGeneral("Downloading %s of content and then exiting...", SecondsToDurationAndTimeStr(info.CaptureDurationSecs))
+		LogGeneral("Downloading a minimum of %s of content and then exiting...", SecondsToDurationAndTimeStr(info.CaptureDurationSecs))
 	}
 
 	if !info.GVideoDDL && !info.GetVideoInfo() {

@@ -1069,11 +1069,9 @@ func SecondsToTimeStr(seconds int) string {
 
 	outputStr := ""
 	if hours > 0 {
-		outputStr += fmt.Sprintf("%0d:%02d:%02d", hours, minutes, seconds)
-	} else if minutes > 0 {
-		outputStr += fmt.Sprintf("%02d:%02d", minutes, seconds)
+		outputStr += fmt.Sprintf("%d:%02d:%02d", hours, minutes, seconds)
 	} else {
-		outputStr += fmt.Sprintf("%02d", seconds)
+		outputStr += fmt.Sprintf("%02d:%02d", minutes, seconds)
 	}
 
 	return outputStr
