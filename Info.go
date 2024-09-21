@@ -1127,7 +1127,8 @@ func (di *DownloadInfo) DownloadFrags(dataType string, seqChan <-chan *seqChanIn
 		// --capture-duration: Stop if reaching the maximum DurationSecs.
 		if di.CaptureDurationSecs != 0 {
 			if endSeq == 0 {
-				endSeq = seqInfo.CurSequence + (di.CaptureDurationSecs / di.TargetDuration) // Calculate ending seq based on current seq number and DurationSecs.
+				capSeqCnt := int(math.Ceil(float64(di.CaptureDurationSecs) / float64(di.TargetDuration)))
+				endSeq = seqInfo.CurSequence + capSeqCnt // Calculate ending seq based on current seq number and DurationSecs.
 			} else {
 				if seqInfo.CurSequence >= endSeq {
 					LogDebug("%s: Reached the maximum duration specified by --capture-duration.", name)
