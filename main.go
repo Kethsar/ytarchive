@@ -204,6 +204,10 @@ Options:
 		See FORMAT OPTIONS below for a list of available format keys.
 		Default is '%[3]s'
 
+	--potoken <PO TOKEN>
+		PO Token from your browser, basically required along with cookies these days.
+		Refer to https://github.com/yt-dlp/yt-dlp/wiki/Extractors#po-token-guide
+
 	--proxy <SCHEME>://[<USER>:<PASS>@]<HOST>:<PORT>
 		Specify a proxy to use for downloading. e.g.
 			- socks5://127.0.0.1:1080
@@ -402,13 +406,17 @@ FORMAT TEMPLATE OPTIONS
 var (
 	cliFlags          *flag.FlagSet
 	info              *DownloadInfo
+	proxyUrl          *url.URL
 	cookieFile        string
 	fnameFormat       string
 	gvAudioUrl        string
 	gvVideoUrl        string
 	tempDir           string
 	ffmpegPath        string
-	proxyUrl          *url.URL
+	liveFrom          string
+	startDelayStr     string
+	capDurationStr    string
+	poToken           string
 	threadCount       uint
 	fragMaxTries      uint
 	filePerms         uint
@@ -449,10 +457,7 @@ var (
 	h264              bool
 	membersOnly       bool
 	disableSaveState  bool
-	liveFrom          string
 	lookalikeChars    bool
-	startDelayStr     string
-	capDurationStr    string
 
 	cancelled = false
 )
@@ -515,6 +520,10 @@ func init() {
 	cliFlags.StringVar(&tempDir, "td", "", "Temporary directory for downloading files.")
 	cliFlags.StringVar(&tempDir, "temporary-dir", "", "Temporary directory for downloading files.")
 	cliFlags.StringVar(&ffmpegPath, "ffmpeg-path", "ffmpeg", "Specify a custom ffmpeg program location, including program name.")
+	cliFlags.StringVar(&liveFrom, "live-from", "", "Starts the download from the specified time instead of from the start.")
+	cliFlags.StringVar(&startDelayStr, "start-delay", "", "Waits for a specified length of time before starting to capture a stream.")
+	cliFlags.StringVar(&capDurationStr, "capture-duration", "", "Captures the livestream for the specified length of time and then exits automatically.")
+	cliFlags.StringVar(&poToken, "potoken", "", "PO Token from your browser")
 	cliFlags.IntVar(&retrySecs, "r", 0, "Seconds to wait between checking stream status.")
 	cliFlags.IntVar(&retrySecs, "retry-stream", 0, "Seconds to wait between checking stream status.")
 	cliFlags.UintVar(&threadCount, "threads", 1, "Number of download threads for each stream type.")
@@ -523,9 +532,6 @@ func init() {
 	cliFlags.UintVar(&dirPerms, "directory-permissions", 0755, "Filesystem permissions for the created directories.")
 	cliFlags.UintVar(&filePerms, "fp", 0644, "Filesystem permissions for the created files.")
 	cliFlags.UintVar(&filePerms, "file-permissions", 0644, "Filesystem permissions for the created files.")
-	cliFlags.StringVar(&liveFrom, "live-from", "", "Starts the download from the specified time instead of from the start.")
-	cliFlags.StringVar(&startDelayStr, "start-delay", "", "Waits for a specified length of time before starting to capture a stream.")
-	cliFlags.StringVar(&capDurationStr, "capture-duration", "", "Captures the livestream for the specified length of time and then exits automatically.")
 
 	cliFlags.Func("video-url", "Googlevideo URL for the video stream.", func(s string) error {
 		var itag int
@@ -598,6 +604,7 @@ func run() int {
 	info.DirMode = os.FileMode(dirPerms)
 	info.DisableSaveState = disableSaveState
 	info.LiveFromVal = liveFrom
+	info.PoToken = poToken
 
 	if doWait {
 		info.Wait = ActionDo

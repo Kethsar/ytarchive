@@ -20,23 +20,23 @@ const (
 	PlayableUnplayable = "UNPLAYABLE"
 	PlayableError      = "ERROR"
 
-	AndroidAPIPostData = `{
+	WebAPIPostData = `{
 	'context': {
 		'client': {
-			'clientName': 'ANDROID',
-			'clientVersion': '19.09.37',
+			'clientName': '%s',
+			'clientVersion': '%s',
 			'hl': 'en'
 		}
 	},
 	'videoId': '%s',
-	'params': 'CgIQBg==',
 	'playbackContext': {
 		'contentPlaybackContext': {
 			'html5Preference': 'HTML5_PREF_WANTS'
 		}
 	},
-	'contentCheckOk': true,
-	'racyCheckOk': true
+	'serviceIntegrityDimensions': {
+		'poToken': '%s'
+	}
 }
 	`
 )
@@ -261,21 +261,34 @@ func (di *DownloadInfo) GetNewestStreamFromStreams() string {
 	return streamUrl
 }
 
-// At the time of adding, retrieving the player response from the api while
-// claiming to be the android client seems to result in unthrottled download
-// URLs. Credit to yt-dlp devs for POST data and headers.
-func (di *DownloadInfo) DownloadAndroidPlayerResponse() (*PlayerResponse, error) {
+// New PO Token stuff requires calling the API instead of
+// using the URLs from scraping the watch page.
+// Credit to yt-dlp devs for POST data and headers.
+func (di *DownloadInfo) DownloadWebPlayerResponse() (*PlayerResponse, error) {
+	if len(di.PoToken) == 0 {
+		return nil, fmt.Errorf("Cannot retrieve web api player response without a PO Token set")
+	}
 	pr := &PlayerResponse{}
 	auth := GenerateSAPISIDHash(di.CookiesURL)
-	data := []byte(fmt.Sprintf(AndroidAPIPostData, di.VideoID))
-	req, err := http.NewRequest("POST", "https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8", bytes.NewBuffer(data))
+	queryParams := ""
+	ytcfg := di.Ytcfg
 
+	if ytcfg == nil {
+		ytcfg = GetDefaultYTCFG()
+	}
+
+	if len(ytcfg.InnertubeApiKey) > 0 {
+		queryParams = fmt.Sprintf("?innertube_key=%s", ytcfg.InnertubeApiKey)
+	}
+
+	data := []byte(fmt.Sprintf(WebAPIPostData, ytcfg.InnertubeClientName, ytcfg.InnertubeClientVersion, di.VideoID, di.PoToken))
+	req, err := http.NewRequest("POST", fmt.Sprintf("https://www.youtube.com/youtubei/v1/player%s", queryParams), bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Add("X-YouTube-Client-Name", "3")
-	req.Header.Add("X-YouTube-Client-Version", "19.09.37")
+	req.Header.Add("X-YouTube-Client-Name", strconv.Itoa(ytcfg.InnertubeCtxClientName))
+	req.Header.Add("X-YouTube-Client-Version", ytcfg.InnertubeCtxClientVersion)
 	req.Header.Add("Origin", "https://www.youtube.com")
 	req.Header.Add("content-type", "application/json")
 
@@ -284,24 +297,23 @@ func (di *DownloadInfo) DownloadAndroidPlayerResponse() (*PlayerResponse, error)
 		req.Header.Add("Authorization", auth)
 	}
 
-	if di.Ytcfg != nil {
-		if len(di.Ytcfg.IdToken) > 0 {
-			req.Header.Add("X-Youtube-Identity-Token", di.Ytcfg.IdToken)
-		}
-
-		if len(di.Ytcfg.DelegatedSessionId) > 0 {
-			req.Header.Add("X-Goog-PageId", di.Ytcfg.DelegatedSessionId)
-		}
-
-		if len(di.Ytcfg.VisitorData) > 0 {
-			req.Header.Add("X-Goog-Visitor-Id", di.Ytcfg.VisitorData)
-		}
-
-		if len(di.Ytcfg.SessionIndex) > 0 {
-			req.Header.Add("X-Goog-AuthUser", di.Ytcfg.SessionIndex)
-		}
+	if len(ytcfg.IdToken) > 0 {
+		req.Header.Add("X-Youtube-Identity-Token", ytcfg.IdToken)
 	}
 
+	if len(ytcfg.DelegatedSessionId) > 0 {
+		req.Header.Add("X-Goog-PageId", ytcfg.DelegatedSessionId)
+	}
+
+	if len(ytcfg.VisitorData) > 0 {
+		req.Header.Add("X-Goog-Visitor-Id", ytcfg.VisitorData)
+	}
+
+	if len(ytcfg.SessionIndex) > 0 {
+		req.Header.Add("X-Goog-AuthUser", ytcfg.SessionIndex)
+	}
+
+	LogTrace("%v", req)
 	resp, err := client.Do(req)
 
 	if err != nil {

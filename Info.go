@@ -158,6 +158,7 @@ type DownloadInfo struct {
 	Metadata   MetaInfo
 	CookiesURL *url.URL
 	Ytcfg      *YTCFG
+	PoToken    string
 
 	Stopping         bool
 	InProgress       bool
@@ -675,33 +676,33 @@ func (di *DownloadInfo) ParseInputUrl() error {
 /*
 Get download URLs either from the DASH manifest or from the adaptiveFormats.
 Prioritize DASH manifest if it is available.
-Attempts to grab from an Android player response as well as desktop,
-favouring Android. Any formats not found in Android are looked for in the
+Attempts to grab from the Web API player response as well as desktop,
+favouring Web API. Any formats not found in the Web API are looked for in the
 desktop player response.
 */
 func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 	urls := make(map[int]string)
-	androidPR, err := di.DownloadAndroidPlayerResponse()
+	WebPlayerResponse, err := di.DownloadWebPlayerResponse()
 
 	if err != nil {
-		LogDebug("Error getting android player response: %s", err.Error())
+		LogDebug("Error getting Web API player response: %s", err.Error())
 	} else {
-		if len(androidPR.StreamingData.DashManifestURL) > 0 {
-			LogDebug("Retrieving URLs from Android DASH manifest")
-			manifest := DownloadData(androidPR.StreamingData.DashManifestURL)
+		if len(WebPlayerResponse.StreamingData.DashManifestURL) > 0 {
+			LogDebug("Retrieving URLs from Web API DASH manifest")
+			manifest := DownloadData(WebPlayerResponse.StreamingData.DashManifestURL)
 			if len(manifest) > 0 {
 				// we store the LastSq to calculate 5 days past
-				urls, di.LastSq = GetUrlsFromManifest(manifest)
+				urls, di.LastSq = GetUrlsFromManifest(manifest, di.PoToken)
 			}
 
 			for itag := range urls {
-				LogTrace("Setting itag %d from Android DASH manifest", itag)
+				LogTrace("Setting itag %d from Web API DASH manifest", itag)
 			}
 		}
 
-		if len(androidPR.StreamingData.AdaptiveFormats) > 0 {
-			LogDebug("Retrieving URLs from Android adaptive formats")
-			for _, fmt := range androidPR.StreamingData.AdaptiveFormats {
+		if len(WebPlayerResponse.StreamingData.AdaptiveFormats) > 0 {
+			LogDebug("Retrieving URLs from Web API adaptive formats")
+			for _, fmt := range WebPlayerResponse.StreamingData.AdaptiveFormats {
 				if len(fmt.URL) == 0 {
 					continue
 				}
@@ -710,7 +711,7 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 				}
 
 				urls[fmt.Itag] = strings.ReplaceAll(fmt.URL, "%", "%%") + "&sq=%d"
-				LogTrace("Setting itag %d from Android adaptive formats", fmt.Itag)
+				LogTrace("Setting itag %d from Web API adaptive formats", fmt.Itag)
 			}
 		}
 	}
@@ -720,7 +721,7 @@ func (di *DownloadInfo) GetDownloadUrls(pr *PlayerResponse) map[int]string {
 		manifest := DownloadData(pr.StreamingData.DashManifestURL)
 		if len(manifest) > 0 {
 			// we store the LastSq to calculate 5 days past
-			dashUrls, lastSq := GetUrlsFromManifest(manifest)
+			dashUrls, lastSq := GetUrlsFromManifest(manifest, di.PoToken)
 			if lastSq > di.LastSq {
 				di.LastSq = lastSq
 			}

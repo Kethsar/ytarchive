@@ -13,15 +13,16 @@ var ytcfgStart = []byte("ytcfg.set(")
 // TODO: If necessary, grab dataSyncIds as well
 // Will be needed if SessionIndex is not available
 type YTCFG struct {
-	DelegatedSessionId     string `json:"DELEGATED_SESSION_ID"`
-	IdToken                string `json:"ID_TOKEN"`
-	Hl                     string `json:"HL"`
-	InnertubeApiKey        string `json:"INNERTUBE_API_KEY"`
-	InnertubeClientName    string `json:"INNERTUBE_CLIENT_NAME"`
-	InnertubeClientVersion string `json:"INNERTUBE_CLIENT_VERSION"`
-	InnertubeCtxClientName int    `json:"INNERTUBE_CONTEXT_CLIENT_NAME"`
-	SessionIndex           string `json:"SESSION_INDEX"`
-	VisitorData            string `json:"VISITOR_DATA"`
+	DelegatedSessionId        string `json:"DELEGATED_SESSION_ID"`
+	IdToken                   string `json:"ID_TOKEN"`
+	Hl                        string `json:"HL"`
+	InnertubeApiKey           string `json:"INNERTUBE_API_KEY"`
+	InnertubeClientName       string `json:"INNERTUBE_CLIENT_NAME"`
+	InnertubeClientVersion    string `json:"INNERTUBE_CLIENT_VERSION"`
+	InnertubeCtxClientName    int    `json:"INNERTUBE_CONTEXT_CLIENT_NAME"`
+	InnertubeCtxClientVersion string `json:"INNERTUBE_CONTEXT_CLIENT_VERSION"`
+	SessionIndex              string `json:"SESSION_INDEX"`
+	VisitorData               string `json:"VISITOR_DATA"`
 }
 
 // Search the given HTML for the ytcfg object
@@ -68,8 +69,19 @@ func GetYTCFGFromHtml(data []byte) []byte {
 	}
 }
 
+func GetDefaultYTCFG() *YTCFG {
+	return &YTCFG{
+		InnertubeApiKey:           "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
+		InnertubeClientName:       "WEB",
+		InnertubeClientVersion:    "2.20241119.01.01",
+		InnertubeCtxClientName:    1,
+		InnertubeCtxClientVersion: "2.20241119.01.01",
+	}
+}
+
 func (di *DownloadInfo) GetYTCFG(videoHtml []byte) error {
-	ytcfg := &YTCFG{}
+	ytcfg := GetDefaultYTCFG()
+	di.Ytcfg = ytcfg
 
 	if len(videoHtml) == 0 {
 		return fmt.Errorf("unable to retrieve data from video page")
@@ -80,12 +92,10 @@ func (di *DownloadInfo) GetYTCFG(videoHtml []byte) error {
 		return fmt.Errorf("unable to retrieve ytcfg data from watch page")
 	}
 
-	err := json.Unmarshal(prData, ytcfg)
+	err := json.Unmarshal(prData, di.Ytcfg)
 	if err != nil {
 		return err
 	}
-
-	di.Ytcfg = ytcfg
 
 	return nil
 }
