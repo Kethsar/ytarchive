@@ -586,6 +586,7 @@ func (di *DownloadInfo) ParseInputUrl() error {
 
 	lowerHost := strings.ToLower(parsedUrl.Host)
 	lowerHost = strings.TrimPrefix(lowerHost, "www.")
+	lowerHost = strings.TrimPrefix(lowerHost, "m.")
 	lowerPath := strings.ToLower(parsedUrl.EscapedPath())
 	parsedQuery := parsedUrl.Query()
 
