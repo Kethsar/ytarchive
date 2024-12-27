@@ -236,6 +236,13 @@ func NewFormatInfo() FormatInfo {
 		"channel":      "",
 		"upload_date":  "",
 		"start_date":   "",
+		"year":   "",
+		"month":   "",
+		"day":   "",
+		"start_time":   "",
+		"hours":   "",
+		"minutes":   "",
+		"seconds":   "",
 		"publish_date": "",
 		"description":  "",
 		"url":          "",
@@ -359,11 +366,23 @@ func (fi FormatInfo) SetInfo(player_response *PlayerResponse) {
 	pmfr := player_response.Microformat.PlayerMicroformatRenderer
 	vid := player_response.VideoDetails.VideoID
 	startDate := strings.ReplaceAll(pmfr.LiveBroadcastDetails.StartTimestamp, "-", "")
+	year, month, day, hours, minutes, seconds := "", "", "", "", "", ""
+	startTime := strings.ReplaceAll(pmfr.LiveBroadcastDetails.StartTimestamp, ":", "")
 	publishDate := strings.ReplaceAll(pmfr.PublishDate, "-", "")
 	url := fmt.Sprintf("https://www.youtube.com/watch?v=%s", vid)
 
 	if len(startDate) > 0 {
 		startDate = startDate[:8]
+		year = startDate[:4]
+		month = startDate[4:6]
+		day = startDate[6:8]
+	}
+
+	if len(startTime) > 0 {
+		startTime = startTime[11:17]
+		hours = startTime[:2]
+		minutes = startTime[2:4]
+		seconds = startTime[4:6]
 	}
 
 	fi["id"] = vid
@@ -373,6 +392,13 @@ func (fi FormatInfo) SetInfo(player_response *PlayerResponse) {
 	fi["channel"] = player_response.VideoDetails.Author
 	fi["upload_date"] = startDate
 	fi["start_date"] = startDate
+	fi["year"] = year
+	fi["month"] = month
+	fi["day"] = day
+	fi["start_time"] = startTime
+	fi["hours"] = hours
+	fi["minutes"] = minutes
+	fi["seconds"] = seconds
 	fi["publish_date"] = publishDate
 	fi["description"] = strings.TrimSpace(player_response.VideoDetails.ShortDescription)
 }

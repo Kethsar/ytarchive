@@ -394,6 +394,13 @@ FORMAT TEMPLATE OPTIONS
 	channel (string): Full name of the channel the livestream is on
 	upload_date (string: YYYYMMDD): Technically stream start date, UTC timezone - see note below
 	start_date (string: YYYYMMDD): Stream start date, UTC timezone
+	start_time (string: HHMMSS): Stream start time, UTC timezone
+	year (string): Year extracted from stream start date, UTC timezone
+	month (string): Month extracted from stream start date, UTC timezone
+	day (string): Day extracted from stream start date, UTC timezone
+	hours (string): Hours extracted from stream start date, UTC timezone
+	minutes (string): Minutes extracted from stream start date, UTC timezone
+	seconds (string): Seconds extracted from stream start date, UTC timezone
 	publish_date (string: YYYYMMDD): Stream publish date, UTC timezone
 	description (string): Video description [disallowed for file name format template]
 
