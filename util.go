@@ -299,7 +299,7 @@ func Execute(prog string, args []string) int {
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		LogError(err.Error())
+		LogError("%s", err.Error())
 		return -1
 	}
 
@@ -307,7 +307,7 @@ func Execute(prog string, args []string) int {
 
 	err = cmd.Start()
 	if err != nil {
-		LogError(err.Error())
+		LogError("%s", err.Error())
 		return -1
 	}
 
@@ -318,7 +318,7 @@ func Execute(prog string, args []string) int {
 
 		if err != nil {
 			if err != io.EOF {
-				LogError(err.Error())
+				LogError("%s", err.Error())
 			}
 
 			break
@@ -331,7 +331,7 @@ func Execute(prog string, args []string) int {
 			retcode = cmd.ProcessState.ExitCode()
 		} else {
 			retcode = -1
-			LogError(err.Error())
+			LogError("%s", err.Error())
 		}
 	}
 

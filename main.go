@@ -691,13 +691,13 @@ func run() int {
 
 	err := info.ParseInputUrl()
 	if err != nil {
-		LogError(err.Error())
+		LogError("%s", err.Error())
 		return 1
 	}
 
 	_, err = FormatFilename(fnameFormat, info.FormatInfo, lookalikeChars)
 	if err != nil {
-		LogError(err.Error())
+		LogError("%s", err.Error())
 		return 1
 	}
 
