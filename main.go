@@ -26,7 +26,7 @@ const (
 
 const (
 	MajorVersion = 0
-	MinorVersion = 4
+	MinorVersion = 5
 	PatchVersion = 0
 )
 
@@ -75,6 +75,11 @@ Options:
 	--audio-url GOOGLEVIDEO_URL
 		Pass in the given url as the audio fragment url. Must be a
 		Google Video url with an itag parameter of 140.
+
+	--capture-duration DURATION or TIMESTRING
+		Captures a livestream for the specified length of time 
+		and then exits and finalizes the video.
+		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 01:30:00).
 
 	-c
 	--cookies COOKIES_FILE
@@ -207,6 +212,10 @@ Options:
 		See FORMAT OPTIONS below for a list of available format keys.
 		Default is '%[3]s'
 
+	--potoken <PO TOKEN>
+		PO Token from your browser, basically required along with cookies these days.
+		Refer to https://github.com/yt-dlp/yt-dlp/wiki/Extractors#po-token-guide
+
 	--proxy <SCHEME>://[<USER>:<PASS>@]<HOST>:<PORT>
 		Specify a proxy to use for downloading. e.g.
 			- socks5://127.0.0.1:1080
@@ -247,6 +256,15 @@ Options:
 		Save the audio to a separate file, similar to when downloading
 		audio_only, alongside the final muxed file. This includes embedding
 		metadata and the thumbnail if set.
+
+	--start-delay DURATION or TIMESTRING
+		Waits for a specified length of time before starting to capture a stream.
+		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 01:30:00).
+		
+		Note: * NOT supported when using also using '--live-from'.
+		      * If the stream is scheduled and has not yet begun then
+		        the delay does not start counting until the stream has begun.
+		      * Ignored when resuming a download.
 
 	-td
 	--temporary-dir DIRECTORY
@@ -324,7 +342,7 @@ Options:
 		          * '--live-from 1h10mm00s' will begin downloading from 1 hour 10 minutes 
 				    after the stream started.
 		          * '--live-from now' will start recording from the current stream time.
-
+	
 Examples:
 	%[1]s -w
 		Waits for a stream. Will prompt for a URL and quality.
@@ -396,6 +414,7 @@ FORMAT TEMPLATE OPTIONS
 var (
 	cliFlags          *flag.FlagSet
 	info              *DownloadInfo
+	proxyUrl          *url.URL
 	cookieFile        string
 	fnameFormat       string
 	gvAudioUrl        string
@@ -405,6 +424,10 @@ var (
 	execBefore        string
 	execAfter         string
 	proxyUrl          *url.URL
+	liveFrom          string
+	startDelayStr     string
+	capDurationStr    string
+	poToken           string
 	threadCount       uint
 	fragMaxTries      uint
 	filePerms         uint
@@ -445,7 +468,6 @@ var (
 	h264              bool
 	membersOnly       bool
 	disableSaveState  bool
-	liveFrom          string
 	lookalikeChars    bool
 
 	cancelled = false
@@ -511,6 +533,10 @@ func init() {
 	cliFlags.StringVar(&ffmpegPath, "ffmpeg-path", "ffmpeg", "Specify a custom ffmpeg program location, including program name.")
 	cliFlags.StringVar(&execBefore, "exec-before", "", "Execute this command before a download starts.")
 	cliFlags.StringVar(&execAfter, "exec-after", "", "Execute this command after a download completes.")
+	cliFlags.StringVar(&liveFrom, "live-from", "", "Starts the download from the specified time instead of from the start.")
+	cliFlags.StringVar(&startDelayStr, "start-delay", "", "Waits for a specified length of time before starting to capture a stream.")
+	cliFlags.StringVar(&capDurationStr, "capture-duration", "", "Captures the livestream for the specified length of time and then exits automatically.")
+	cliFlags.StringVar(&poToken, "potoken", "", "PO Token from your browser")
 	cliFlags.IntVar(&retrySecs, "r", 0, "Seconds to wait between checking stream status.")
 	cliFlags.IntVar(&retrySecs, "retry-stream", 0, "Seconds to wait between checking stream status.")
 	cliFlags.UintVar(&threadCount, "threads", 1, "Number of download threads for each stream type.")
@@ -519,7 +545,6 @@ func init() {
 	cliFlags.UintVar(&dirPerms, "directory-permissions", 0755, "Filesystem permissions for the created directories.")
 	cliFlags.UintVar(&filePerms, "fp", 0644, "Filesystem permissions for the created files.")
 	cliFlags.UintVar(&filePerms, "file-permissions", 0644, "Filesystem permissions for the created files.")
-	cliFlags.StringVar(&liveFrom, "live-from", "", "Starts the download from the specified time instead of from the start.")
 
 	cliFlags.Func("video-url", "Googlevideo URL for the video stream.", func(s string) error {
 		var itag int
@@ -602,6 +627,7 @@ func run() int {
 	info.DirMode = os.FileMode(dirPerms)
 	info.DisableSaveState = disableSaveState
 	info.LiveFromVal = liveFrom
+	info.PoToken = poToken
 
 	if doWait {
 		info.Wait = ActionDo
@@ -709,11 +735,32 @@ func run() int {
 		LogInfo("Loaded cookie file %s", cookieFile)
 	}
 
+	if startDelayStr != "" {
+		// Not supported when also using --live-from
+		if liveFrom != "" {
+			LogError("You cannot use both --start-delay and --live-from at the same time.")
+			return 1
+		}
+
+		err = info.ParseStartDelayStrVal(startDelayStr)
+		if err != nil {
+			return 1
+		}
+	}
+
+	if capDurationStr != "" {
+		err = info.ParseCaptureDurationStrVal(capDurationStr)
+		if err != nil {
+			return 1
+		}
+		LogGeneral("Downloading a minimum of %s of content and then exiting...", SecondsToDurationAndTimeStr(info.CaptureDurationSecs))
+	}
+
 	if !info.GVideoDDL && !info.GetVideoInfo() {
 		return 1
 	}
 
-	if info.LiveFromVal != "" {
+	if liveFrom != "" {
 		err = info.ParseLiveFromStrVal()
 		if err != nil {
 			return 1
@@ -793,6 +840,16 @@ func run() int {
 			if err == nil && len(tmpDir) == 0 {
 				tmpDir = info.DLState[info.Quality].TempDir
 			}
+		}
+	}
+
+	// --start-delay, do not process if resuming a download.
+	if info.StartDelaySecs != 0 && (info.DLState[AudioItag].Fragments != 0 || info.DLState[info.Quality].Fragments != 0) {
+		LogWarn("Option --start-delay is being ignored as a download is being resumed.")
+	} else {
+		if !info.WaitForStartDelay() {
+			LogError("Got an error when re-grabbing video info after the delay period elapsed. Exiting.")
+			return 1
 		}
 	}
 

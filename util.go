@@ -467,7 +467,7 @@ func IsFragmented(url string) bool {
 }
 
 // Prase the DASH manifest XML and get the download URLs from it
-func GetUrlsFromManifest(manifest []byte) (map[int]string, int) {
+func GetUrlsFromManifest(manifest []byte, poToken string) (map[int]string, int) {
 	urls := make(map[int]string)
 	var mpd MPD
 
@@ -504,7 +504,11 @@ func GetUrlsFromManifest(manifest []byte) (map[int]string, int) {
 		}
 
 		if itag > 0 && len(r.BaseURL) > 0 {
-			urls[itag] = strings.ReplaceAll(r.BaseURL, "%", "%%") + "sq/%d"
+			formatUrl := strings.ReplaceAll(r.BaseURL, "%", "%%") + "sq/%d"
+			if len(poToken) > 0 {
+				formatUrl = fmt.Sprintf("%s/pot/%s", formatUrl, poToken)
+			}
+			urls[itag] = formatUrl
 		}
 	}
 
@@ -1069,11 +1073,9 @@ func SecondsToTimeStr(seconds int) string {
 
 	outputStr := ""
 	if hours > 0 {
-		outputStr += fmt.Sprintf("%0d:%02d:%02d", hours, minutes, seconds)
-	} else if minutes > 0 {
-		outputStr += fmt.Sprintf("%02d:%02d", minutes, seconds)
+		outputStr += fmt.Sprintf("%d:%02d:%02d", hours, minutes, seconds)
 	} else {
-		outputStr += fmt.Sprintf("%02d", seconds)
+		outputStr += fmt.Sprintf("%02d:%02d", minutes, seconds)
 	}
 
 	return outputStr

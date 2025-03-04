@@ -50,6 +50,11 @@ Options:
 		Pass in the given url as the audio fragment url. Must be a
 		Google Video url with an itag parameter of 140.
 
+	--capture-duration DURATION or TIMESTRING
+		Captures a livestream for the specified length of time 
+		and then exits and finalizes the video.
+		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
+
 	-c
 	--cookies COOKIES_FILE
 		Give a cookies.txt file that has your youtube cookies. Allows
@@ -181,6 +186,10 @@ Options:
 		See FORMAT OPTIONS below for a list of available format keys.
 		Default is '%(title)s-%(id)s'
 
+	--potoken <PO TOKEN>
+		PO Token from your browser, basically required along with cookies these days.
+		Refer to https://github.com/yt-dlp/yt-dlp/wiki/Extractors#po-token-guide
+
 	--proxy <SCHEME>://[<USER>:<PASS>@]<HOST>:<PORT>
 		Specify a proxy to use for downloading. e.g.
 			- socks5://127.0.0.1:1080
@@ -221,6 +230,15 @@ Options:
 		Save the audio to a separate file, similar to when downloading
 		audio_only, alongside the final muxed file. This includes embedding
 		metadata and the thumbnail if set.
+
+	--start-delay DURATION or TIMESTRING
+		Waits for a specified length of time before starting to capture a stream from that time.
+		Supports time durations (e.g. 1d8h10m) or time strings (e.g. 12:30:05).
+		
+		Note: * NOT supported when using also using '--live-from'.
+		      * If the stream is scheduled and has not yet begun then
+		        the delay does not start counting until the stream has begun.
+		      * Ignored when resuming a download.
 
 	-td
 	--temporary-dir DIRECTORY
