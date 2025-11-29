@@ -109,6 +109,14 @@ Options:
 	--error
 		Print only errors and general information.
 
+	--exec-after COMMAND_PATH
+		Execute the given COMMAND_PATH after a completed download.
+		The first argument to COMMAND_PATH will be the completed filename.
+
+	--exec-before COMMAND_PATH
+		Execute the given COMMAND_PATH before a download is started.
+		The first argument to COMMAND_PATH will be the target filename.
+
 	--ffmpeg-path FFMPEG_PATH
 		Set a specific ffmpeg location, including program name.
 		e.g. "C:\ffmpeg\ffmpeg.exe" or "/opt/ffmpeg/ffmpeg"
@@ -429,6 +437,8 @@ var (
 	startDelayStr     string
 	capDurationStr    string
 	poToken           string
+	execBefore        string
+	execAfter         string
 	threadCount       uint
 	fragMaxTries      uint
 	filePerms         uint
@@ -538,6 +548,8 @@ func init() {
 	cliFlags.StringVar(&startDelayStr, "start-delay", "", "Waits for a specified length of time before starting to capture a stream.")
 	cliFlags.StringVar(&capDurationStr, "capture-duration", "", "Captures the livestream for the specified length of time and then exits automatically.")
 	cliFlags.StringVar(&poToken, "potoken", "", "PO Token from your browser")
+	cliFlags.StringVar(&execBefore, "exec-before", "", "Execute this command before a download starts.")
+	cliFlags.StringVar(&execAfter, "exec-after", "", "Execute this command after a download completes.")
 	cliFlags.IntVar(&retrySecs, "r", 0, "Seconds to wait between checking stream status.")
 	cliFlags.IntVar(&retrySecs, "retry-stream", 0, "Seconds to wait between checking stream status.")
 	cliFlags.UintVar(&threadCount, "threads", 1, "Number of download threads for each stream type.")
@@ -595,6 +607,16 @@ func init() {
 		proxyUrl = parsedUrl
 		return nil
 	})
+}
+
+func ExecCallback(execPath string, execArgs []string) {
+	if execPath != "" {
+		LogGeneral("Attempting to call execute exec-before/after COMMAND_PATH")
+		eRetcode := Execute(execPath, execArgs)
+		if eRetcode != 0 {
+			LogError("Execute returned code %d. Something must have gone wrong with %s.", eRetcode, execPath)
+		}
+	}
 }
 
 // ehh, bad way to do this probably but allows deferred functions to run
@@ -936,12 +958,14 @@ func run() int {
 	if len(info.GetDownloadUrl(DtypeAudio)) > 0 {
 		LogInfo("Starting download to %s", afile)
 		go info.DownloadStream(DtypeAudio, afile, progressChan, dlDoneChan)
+		ExecCallback(execBefore, []string{finalAudioFile, info.URL})
 		activeDownloads += 1
 	}
 
 	if len(info.GetDownloadUrl(DtypeVideo)) > 0 {
 		LogInfo("Starting download to %s", vfile)
 		go info.DownloadStream(DtypeVideo, vfile, progressChan, dlDoneChan)
+		ExecCallback(execBefore, []string{finalVideoFile})
 		activeDownloads += 1
 	}
 
@@ -1189,6 +1213,8 @@ func run() int {
 	if separateAudio {
 		LogGeneral("%[1]sFinal audio file: %[2]s%[1]s", "\n", audioFFMpegArgs.FileName)
 	}
+
+	ExecCallback(execAfter, []string{ffmpegArgs.FileName, info.URL})
 
 	return 0
 }
